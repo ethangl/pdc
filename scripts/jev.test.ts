@@ -77,6 +77,24 @@ test("request2: null with a valid root reports nothing stale", () => {
   assert.deepEqual(unknownIdsIn(cached, taxonomy), []);
 });
 
+test("a node that moved to another family is stale", () => {
+  const moved = taxonomyFromRaw({
+    version: 1,
+    nodes: [
+      { id: "gin", name: "Gin" },
+      { id: "vodka", name: "Vodka" },
+      { id: "london-dry-gin", name: "London Dry Gin", parent: "vodka" },
+    ],
+  });
+  const cached = response({
+    rootChoice: "gin",
+    rootProbabilities: { gin: 0.9, vodka: 0.1 },
+    nodeChoice: "london-dry-gin",
+    nodeProbabilities: { "london-dry-gin": 0.9, gin: 0.1 },
+  });
+  assert.deepEqual(unknownIdsIn(cached, moved), ["london-dry-gin"]);
+});
+
 test('"none" is never reported', () => {
   const cached = response({
     rootChoice: "none",
@@ -143,4 +161,10 @@ test("a cache miss with no usable prior asks (no prior, or an error prior)", () 
 
   const errorPrior = decide({ overridden: false, refresh: false, readCache: () => ({ status: "miss" }), prior: priorError });
   assert.deepEqual(errorPrior, { kind: "ask", reason: "miss", unknownIds: [] });
+});
+
+test("a prior override record is not kept once the override is gone", () => {
+  const priorOverride = { core: "fancy gin", count: 5, status: "override" } as unknown as ClassificationItem;
+  const decision = decide({ overridden: false, refresh: false, readCache: () => ({ status: "miss" }), prior: priorOverride });
+  assert.deepEqual(decision, { kind: "ask", reason: "miss", unknownIds: [] });
 });

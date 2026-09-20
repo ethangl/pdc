@@ -1,5 +1,7 @@
-// Jev (typesafe.ai) client construction, question builders, and answer
-// parsing for scripts/classify.ts. Keeps classify.ts a thin driver.
+// Everything scripts/classify.ts needs from Jev (typesafe.ai) that is not
+// orchestration: the client, the two questions, the response cache and its
+// validation against the current taxonomy, the per-item routing decision,
+// and turning responses into committed classification records.
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
@@ -120,13 +122,14 @@ function cachePathFor(core: string, taxonomy: Taxonomy): string {
 }
 
 /**
- * Node ids a cached response refers to that the taxonomy no longer has.
- * Empty means the response is usable. Checks the root answer's
- * probabilities and choice, and, when present, the node answer's
- * probabilities and choice. A new node the cached response simply did not
- * have as an option is NOT stale: that additive drift is accepted, which is
- * the whole point of dropping the structure hash from the cache key. "none"
- * is a sentinel, never a real node id, so it is never reported.
+ * Node ids a cached response names that make it unusable: ids the taxonomy
+ * no longer has, and node-question candidates that have since moved out of
+ * the answered family (the item was scored against an option set the tree
+ * no longer has). Empty means the response is usable. A new node the cached
+ * response simply did not have as an option is NOT stale: that additive
+ * drift is accepted, which is the whole point of dropping the structure hash
+ * from the cache key. "none" is a sentinel, never a real node id, so it is
+ * never reported.
  */
 export function unknownIdsIn(response: CachedResponse, taxonomy: Taxonomy): string[] {
   const unknown = new Set<string>();
@@ -141,8 +144,14 @@ export function unknownIdsIn(response: CachedResponse, taxonomy: Taxonomy): stri
 
   if (response.request2) {
     const nodeAnswer = response.request2.answers.node;
-    for (const id of Object.keys(nodeAnswer.probabilities)) check(id);
-    check(nodeAnswer.choice);
+    const candidates = [...Object.keys(nodeAnswer.probabilities), nodeAnswer.choice];
+    for (const id of candidates) check(id);
+    const root = rootAnswer.choice;
+    if (root !== NONE && taxonomy.nodes.has(root)) {
+      for (const id of candidates) {
+        if (id !== NONE && taxonomy.nodes.has(id) && taxonomy.rootOf(id) !== root) unknown.add(id);
+      }
+    }
   }
 
   return [...unknown];
@@ -179,8 +188,9 @@ export type Decision =
 /** What to do with one selected item. Rules, in order: an override never
  * reaches the API; --refresh always asks; a cache hit rebuilds; a stale
  * cache entry asks even when a prior exists (the prior came from the same
- * response); a cache miss keeps a prior unless it is an error record;
- * otherwise ask. */
+ * response); a cache miss keeps a prior unless it is an error record
+ * (nothing was learned) or an override record (the override that produced
+ * it is gone, or `overridden` would be true); otherwise ask. */
 export function decide(input: {
   overridden: boolean;
   refresh: boolean;
@@ -194,7 +204,9 @@ export function decide(input: {
   if (cacheRead.status === "hit") return { kind: "rebuild", cached: cacheRead.response };
   if (cacheRead.status === "stale") return { kind: "ask", reason: "stale", unknownIds: cacheRead.unknownIds };
 
-  if (input.prior && input.prior.status !== "error") return { kind: "keep", prior: input.prior };
+  if (input.prior && input.prior.status !== "error" && input.prior.status !== "override") {
+    return { kind: "keep", prior: input.prior };
+  }
   return { kind: "ask", reason: "miss", unknownIds: [] };
 }
 

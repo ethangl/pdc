@@ -202,9 +202,12 @@ async function main(): Promise<void> {
 
   let selected = selectUnresolvedItems(taxonomy, preprocessed.items, args);
   if (args.onlyReview) {
+    // A record dropped for naming a removed node has no current status; it
+    // must be re-asked too, or it would vanish from the output without one.
+    const dropped = new Set(droppedCores);
     selected = selected.filter((item) => {
       const status = currentStatusByCore.get(item.core);
-      return status === "review" || status === "none";
+      return status === "review" || status === "none" || dropped.has(item.core);
     });
   }
 
