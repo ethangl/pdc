@@ -100,7 +100,8 @@ Pipeline for each distinct raw ingredient string:
    stated style therefore resolves to the generic node, which is the correct
    answer under the matching rules.
 4. Confidence gating. Accept at or above 0.9. Queue the rest for manual
-   review. Results are cached by (string, tree version, prompt version) in
+   review. Results are cached by (string, tree version, tree structure hash,
+   prompt version) in
    `data/cache/jev/` and summarized in `data/classifications.json`.
 5. Manual overrides in `data/overrides.json` win over the classifier.
 

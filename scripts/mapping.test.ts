@@ -66,6 +66,7 @@ interface Case {
   expectCategoryHits?: string[];
   expectUnresolvedAlternatives?: number;
   expectSubstitute?: boolean;
+  expectDroppedReason?: "override" | "optional";
 }
 
 const cases: Case[] = [
@@ -142,6 +143,19 @@ const cases: Case[] = [
     name: "line entirely dropped by null override",
     input: line({ core: "unicorn tears" }),
     expectBucket: "dropped",
+    expectDroppedReason: "override",
+  },
+  {
+    name: "garnish-like line with no resolution is dropped, not unresolved",
+    input: line({ core: "moon dust", flags: { garnishLike: true } }),
+    expectBucket: "dropped",
+    expectDroppedReason: "optional",
+  },
+  {
+    name: "optional line with no resolution is dropped, not unresolved",
+    input: line({ core: "moon dust", flags: { optional: true } }),
+    expectBucket: "dropped",
+    expectDroppedReason: "optional",
   },
 ];
 
@@ -165,6 +179,9 @@ for (const testCase of cases) {
     }
     if (testCase.expectSubstitute !== undefined) {
       assert.equal(requirement?.substitute ?? false, testCase.expectSubstitute);
+    }
+    if (testCase.expectDroppedReason !== undefined) {
+      assert.equal(result.bucket === "dropped" ? result.reason : undefined, testCase.expectDroppedReason);
     }
   });
 }

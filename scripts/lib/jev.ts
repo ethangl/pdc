@@ -105,13 +105,16 @@ export interface CachedResponse {
   request2: SystemOneResult<NodeQuestions> | null;
 }
 
-/** A cache key stable across reruns, tied to the taxonomy and prompt version. */
-function cacheKeyFor(core: string, taxonomyVersion: number, promptVersion: string): string {
-  return crypto.createHash("sha1").update(`${core}|${taxonomyVersion}|${promptVersion}`).digest("hex");
+/** A cache key stable across reruns, tied to the taxonomy (version and
+ * structure) and prompt version. The structure hash invalidates the cache
+ * when nodes, parents, or categories change; it deliberately ignores names
+ * and aliases, so an alias edit does not invalidate the cache. */
+function cacheKeyFor(core: string, taxonomy: Taxonomy): string {
+  return crypto.createHash("sha1").update(`${core}|${taxonomy.version}|${PROMPT_VERSION}|${taxonomy.structureHash}`).digest("hex");
 }
 
 function cachePathFor(core: string, taxonomy: Taxonomy): string {
-  return path.join(JEV_CACHE_DIR, `${cacheKeyFor(core, taxonomy.version, PROMPT_VERSION)}.json`);
+  return path.join(JEV_CACHE_DIR, `${cacheKeyFor(core, taxonomy)}.json`);
 }
 
 /** The cached Jev response for `core`, or null when nothing is cached. */

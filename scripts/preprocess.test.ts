@@ -184,6 +184,33 @@ const cases: Case[] = [
   // Unicode normalization: decomposed accents (combining cedilla) must
   // normalize to precomposed form so taxonomy aliases still match.
   { raw: "orange curaçao", core: "orange curaçao" },
+
+  // 11. Comma lists on the first side of a plain `or` alternative split into
+  // one alternative per part, not one combined string.
+  {
+    raw: "Scotch, bourbon, or brandy",
+    core: "scotch",
+    alternatives: ["scotch", "bourbon", "brandy"],
+  },
+  {
+    raw: "lemon, lime or orange juice",
+    core: "lemon juice",
+    alternatives: ["lemon juice", "lime juice", "orange juice"],
+  },
+
+  // 12. Alternatives get the full tail normalization (garnish word,
+  // proof/age stripping), not just the core.
+  {
+    raw: "lemon or lime wedges",
+    core: "lemon wedge",
+    alternatives: ["lemon wedge", "lime wedge"],
+    flags: { garnishLike: true },
+  },
+  {
+    raw: "101-proof bourbon or rye",
+    core: "bourbon",
+    alternatives: ["bourbon", "rye"],
+  },
 ];
 
 for (const testCase of cases) {

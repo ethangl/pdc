@@ -48,17 +48,17 @@ export interface ResolveDeps {
   isCategory: (nodeId: string) => boolean;
 }
 
-/** core -> node, keyed for resolveCandidate: accepted/override classifications
+/** core -> node, keyed for resolveCandidate: accepted classifications
  * resolve as "classification", fallback classifications as "fallback".
- * Override items with no node ("not an ingredient") are skipped. */
+ * Items with status "override" are skipped here: resolveCandidate checks
+ * curated/overrides.json itself first, so an override classification record
+ * is never consulted through this lookup. */
 export function classificationLookup(items: ClassificationItem[]): ResolveDeps["classifications"] {
   const lookup: ResolveDeps["classifications"] = new Map();
   for (const item of items) {
     if (item.status === "accepted" || item.status === "fallback") {
       if (item.node === null) continue; // invariant: always a string node for these statuses
       lookup.set(item.core, { nodeId: item.node, source: item.status === "fallback" ? "fallback" : "classification" });
-    } else if (item.status === "override" && item.node !== null) {
-      lookup.set(item.core, { nodeId: item.node, source: "classification" });
     }
   }
   return lookup;
@@ -82,13 +82,16 @@ interface ResolutionStats {
 }
 
 /** A line whose every candidate was overridden to null (not an ingredient,
- * e.g. "to top", "spirit") is discarded entirely: bucket "dropped", not
- * reported as unresolved. */
+ * e.g. "to top", "spirit") is discarded entirely: bucket "dropped", reason
+ * "override". A line with no override reasons that has no resolution at all
+ * is also dropped, reason "optional", when its flags mark it optional or
+ * garnish-like: per docs/DESIGN.md, such a line never blocks a recipe. Only
+ * a line with neither escape is reported as "unresolved". */
 export type LineResolution = ResolutionStats &
   (
     | { bucket: "requires" | "optional"; requirement: Requirement }
     | { bucket: "unresolved"; unresolved: UnresolvedLine }
-    | { bucket: "dropped" }
+    | { bucket: "dropped"; reason: "override" | "optional" }
   );
 
 type CandidateResult =
@@ -166,6 +169,18 @@ export function resolveLine(line: PreprocessedIngredient, deps: ResolveDeps): Li
       // it entirely rather than reporting it as unresolved.
       return {
         bucket: "dropped",
+        reason: "override",
+        resolvedCandidates,
+        categoryHits,
+        unresolvedAlternatives: 0,
+      };
+    }
+    if (line.flags.optional || line.flags.garnishLike) {
+      // No candidate resolved, but the line never blocks the recipe anyway
+      // (per docs/DESIGN.md): drop it rather than reporting it as unresolved.
+      return {
+        bucket: "dropped",
+        reason: "optional",
         resolvedCandidates,
         categoryHits,
         unresolvedAlternatives: 0,

@@ -72,6 +72,10 @@ interface Args {
 }
 
 function parseArgs(argv: string[]): Args {
+  // pnpm forwards a literal "--" separator when invoked as `pnpm classify --
+  // --dry-run`; strict parseArgs treats anything after it as a positional
+  // and rejects it. Drop one leading "--" so both invocations behave alike.
+  if (argv[0] === "--") argv = argv.slice(1);
   const { values } = parseNodeArgs({
     args: argv,
     options: {
@@ -203,8 +207,11 @@ async function main(): Promise<void> {
   // Classify decisions, without calling the API yet. For each selected item
   // that is not an override: refresh forces the API; otherwise a cached Jev
   // response wins (rebuild is a pure function of the cache and the current
-  // taxonomy/status logic), else the prior committed item survives verbatim,
-  // else the API is called.
+  // taxonomy/status logic), else the prior committed item survives verbatim
+  // (unless its status is "error", which is not a usable prior: it means the
+  // previous run's API call failed and nothing was learned about the item, so
+  // it falls through to toClassify like a never-seen item), else the API is
+  // called.
   const toOverride: PreprocessedItem[] = [];
   const toRebuild: { item: PreprocessedItem; cached: CachedResponse }[] = [];
   const toKeep: ClassificationItem[] = [];
@@ -221,7 +228,7 @@ async function main(): Promise<void> {
         continue;
       }
       const prior = priorMap.get(item.core);
-      if (prior) {
+      if (prior && prior.status !== "error") {
         toKeep.push(prior);
         continue;
       }
@@ -278,8 +285,16 @@ async function main(): Promise<void> {
     }
   });
 
-  // Merge: prior items (version-matched) survive unless this run replaced them.
-  const finalMap = new Map<string, ClassificationItem>(priorMap);
+  // Merge: prior items (version-matched) survive unless this run replaced
+  // them, but a prior record is dropped rather than carried forward when its
+  // core no longer appears in the preprocessed file or now resolves through
+  // a taxonomy alias (a tree edit made the classifier record obsolete).
+  const finalMap = new Map<string, ClassificationItem>();
+  for (const [core, item] of priorMap) {
+    if (!preprocessedByCore.has(core)) continue;
+    if (taxonomy.resolveAlias(core) !== undefined) continue;
+    finalMap.set(core, item);
+  }
   for (const item of freshlyBuilt) finalMap.set(item.core, item);
   for (const item of toKeep) finalMap.set(item.core, item);
   // Refresh counts from the current preprocessed file where available.

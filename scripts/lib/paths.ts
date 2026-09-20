@@ -3,6 +3,10 @@
 // generated, and is gitignored. See AGENTS.md's policy and README.md's Data
 // section.
 
+// --- repo root ---
+
+export const ENV_LOCAL_PATH = ".env.local";
+
 // --- curated/ (committed, hand-edited or classifier output) ---
 
 export const TAXONOMY_PATH = "curated/taxonomy.json";

@@ -16,6 +16,10 @@ const OUT_PATH = path.join(REVIEW_DIR, "coverage-unmatched.txt");
 const DEFAULT_LIMIT = 150;
 
 function parseArgs(argv: string[]): { limit: number; noValidate: boolean } {
+  // See classify.ts's parseArgs: pnpm forwards a literal "--" separator when
+  // invoked as `pnpm coverage -- --limit 10`; drop one leading "--" so that
+  // and the no-separator form behave alike under strict parsing.
+  if (argv[0] === "--") argv = argv.slice(1);
   const { values } = parseNodeArgs({
     args: argv,
     options: {

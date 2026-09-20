@@ -254,6 +254,26 @@ function trimPunctuation(value: string): string {
   return value.trim().replace(/^[\s,;]+/, "").replace(/[\s,;]+$/, "").trim();
 }
 
+/** Removes the first match of `re` from `text`, records the trimmed
+ * fragment in `removed`, and returns the resulting (trimmed) text - or null
+ * when `re` did not match. Shared by preprocessIngredient's own `strip` and
+ * finishCore's, so there is one place that knows how a strip step records
+ * what it removed. */
+function stripMatch(text: string, re: RegExp, removed: string[], replacement = " "): string | null {
+  const match = text.match(re);
+  if (!match) return null;
+  removed.push(match[0].trim());
+  return trimPunctuation(text.replace(re, replacement));
+}
+
+// Built once at module load, longest modifier first (as LEADING_MODIFIERS
+// already is), so stripLeadingModifiers doesn't recompile a regex per word
+// per call.
+const LEADING_MODIFIER_RES: { mod: string; re: RegExp }[] = LEADING_MODIFIERS.map((mod) => ({
+  mod,
+  re: new RegExp(`^${escapeRegex(mod)}\\s+`, "i"),
+}));
+
 // Strips leading modifiers (repeatedly), unless the text starts with a
 // protected phrase whose first word only looks like a modifier ("cold brew",
 // "dry ice", "small batch", ...).
@@ -265,8 +285,7 @@ function stripLeadingModifiers(text: string, removed: string[]): string {
   let changed = true;
   while (changed) {
     changed = false;
-    for (const mod of LEADING_MODIFIERS) {
-      const re = new RegExp(`^${escapeRegex(mod)}\\s+`, "i");
+    for (const { mod, re } of LEADING_MODIFIER_RES) {
       if (re.test(result)) {
         removed.push(mod);
         result = result.replace(re, "");
@@ -314,6 +333,58 @@ function stripUnbalancedParens(text: string, removed: string[]): string {
   return trimPunctuation(result);
 }
 
+// Steps 10, 12, 13, 14, 15: infusion/wash transform, proof/age qualifiers,
+// trailing clauses, singularizing the last word, and garnish-word detection
+// - the tail normalization shared by the core and every alternative
+// (resolveLine matches candidates against `alternatives`, so an
+// unnormalized alternative would never resolve the way its core does).
+function finishCore(s: string, removed: string[]): { text: string; infused: boolean; garnishLike: boolean } {
+  let text = s;
+  const strip = (re: RegExp, replacement = " "): boolean => {
+    const next = stripMatch(text, re, removed, replacement);
+    if (next === null) return false;
+    text = next;
+    return true;
+  };
+  // Step 10: infusion / wash transform.
+  let infused = false;
+  const infusionMatch = text.match(INFUSION_RE);
+  if (infusionMatch) {
+    infused = true;
+    removed.push(`${infusionMatch[1]}-${infusionMatch[2]}`);
+    text = infusionMatch[3].trim();
+  }
+  // Step 12: proof/age qualifiers ("overproof" is a style word, not stripped).
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const re of PROOF_AGE_RES) if (strip(re, "")) changed = true;
+  }
+  // Step 13: trailing clauses ("chilled", "to taste", "divided", prep notes).
+  strip(TRAILING_CLAUSE_RE, "");
+  // Step 14: singularize the last word for a small, safe set of plural nouns.
+  const words = text.split(" ").filter(Boolean);
+  if (words.length > 0) {
+    const last = words[words.length - 1] as string;
+    if (!SINGULARIZE_EXCLUDE.has(last) && !last.endsWith("ss")) {
+      const singular = BERRY_SUFFIX_RE.test(last)
+        ? last.replace(BERRY_SUFFIX_RE, "berry")
+        : PLURAL_MAP[last] ?? (S_PLURAL_WORDS.has(last) ? last.slice(0, -1) : undefined);
+      if (singular) {
+        removed.push(`${last}→${singular}`);
+        words[words.length - 1] = singular;
+        text = words.join(" ");
+      }
+    }
+  }
+  // Step 15: garnish-like, stripping a trailing "for garnish" note.
+  let garnishLike = false;
+  if (strip(/\bfor garnish$/i, "")) garnishLike = true;
+  const lastWord = text.split(" ").filter(Boolean).pop();
+  if (lastWord && GARNISH_WORDS.has(lastWord)) garnishLike = true;
+  return { text, infused, garnishLike };
+}
+
 export function preprocessIngredient(raw: string, description = ""): PreprocessedIngredient {
   const removed: string[] = [];
   // Step 1: normalize Unicode (NFC, so decomposed accents match taxonomy
@@ -329,12 +400,11 @@ export function preprocessIngredient(raw: string, description = ""): Preprocesse
     .replace(/\*+$/, "")
     .trim();
   const fallback = text.toLowerCase();
-  // Removes the first match of `re` from `text`, records the fragment, trims. True when it fired.
+  // True when `re` fired; mutates `text` via stripMatch.
   const strip = (re: RegExp, replacement = " "): boolean => {
-    const match = text.match(re);
-    if (!match) return false;
-    removed.push(match[0].trim());
-    text = trimPunctuation(text.replace(re, replacement));
+    const next = stripMatch(text, re, removed, replacement);
+    if (next === null) return false;
+    text = next;
     return true;
   };
   // Step 2: house-made editor's-note marker (case-sensitive: step 6's brand
@@ -391,10 +461,15 @@ export function preprocessIngredient(raw: string, description = ""): Preprocesse
       return " ";
     }),
   );
-  // Step 9: alternatives ("a or b", "a (or b)", "a, or b"). A lone-adjective
-  // first option ("fino or manzanilla sherry") borrows the second option's
-  // last word unless it stands alone (STANDALONE_INGREDIENT_WORDS). Leading
-  // modifiers (step 11) strip from each branch here, before that decision.
+  // Step 9: alternatives ("a or b", "a (or b)", "a, or b", "a, b, or c"). In
+  // the plain `or` branch, the first side may itself be a comma list
+  // ("scotch, bourbon, or brandy"): each comma-separated part becomes its
+  // own alternative, not one combined string. (The parenthetical "(or x)"
+  // branch never carries a comma list and always yields exactly two.) A
+  // lone-adjective part ("fino" in "fino or manzanilla sherry") borrows the
+  // last alternative's last word unless it stands alone
+  // (STANDALONE_INGREDIENT_WORDS). Leading modifiers (step 11) strip from
+  // each part here, before that decision.
   let alternatives: string[] | undefined;
   let alt1: string | undefined;
   let alt2: string | undefined;
@@ -415,58 +490,45 @@ export function preprocessIngredient(raw: string, description = ""): Preprocesse
     }
   }
   if (alt1 !== undefined && alt2 !== undefined) {
-    const alt1Stripped = stripLeadingModifiers(alt1, removed);
-    const alt2Stripped = stripLeadingModifiers(alt2, removed);
-    const alt1Words = alt1Stripped.split(" ").filter(Boolean);
-    const alt2Words = alt2Stripped.split(" ").filter(Boolean);
-    const finalAlt1 =
-      alt1Words.length === 1 && alt2Words.length >= 2 && !STANDALONE_INGREDIENT_WORDS.has(alt1Words[0] as string)
-        ? `${alt1Stripped} ${alt2Words[alt2Words.length - 1]}`
-        : alt1Stripped;
-    alternatives = [finalAlt1, alt2Stripped];
-    text = finalAlt1;
+    const leadParts = orParenMatch ? [alt1] : alt1.split(",").map((part) => part.trim()).filter(Boolean);
+    const parts = [...leadParts, alt2].map((part) => stripLeadingModifiers(part, removed));
+    const partWords = parts.map((part) => part.split(" ").filter(Boolean));
+    const lastWords = partWords[partWords.length - 1] as string[];
+    const finalParts = parts.map((part, i) => {
+      if (i === parts.length - 1) return part;
+      const words = partWords[i] as string[];
+      return words.length === 1 && lastWords.length >= 2 && !STANDALONE_INGREDIENT_WORDS.has(words[0] as string)
+        ? `${part} ${lastWords[lastWords.length - 1]}`
+        : part;
+    });
+    alternatives = finalParts;
+    text = finalParts[0] as string;
   }
   const hadAlternatives = alternatives !== undefined;
-  // Step 10: infusion / wash transform.
-  let infused = false;
-  const infusionMatch = text.match(INFUSION_RE);
-  if (infusionMatch) {
-    infused = true;
-    removed.push(`${infusionMatch[1]}-${infusionMatch[2]}`);
-    text = infusionMatch[3].trim();
-  }
   // Step 11: strip leading modifiers repeatedly (protected phrases block
   // this); skipped when step 9 already ran it per-branch, since re-running
   // on a borrowed trailing noun would wrongly strip a word.
   if (!hadAlternatives) text = stripLeadingModifiers(text, removed);
-  // Step 12: proof/age qualifiers ("overproof" is a style word, not stripped).
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const re of PROOF_AGE_RES) if (strip(re, "")) changed = true;
-  }
-  // Step 13: trailing clauses ("chilled", "to taste", "divided", prep notes).
-  strip(TRAILING_CLAUSE_RE, "");
-  // Step 14: singularize the last word for a small, safe set of plural nouns.
-  const words = text.split(" ").filter(Boolean);
-  if (words.length > 0) {
-    const last = words[words.length - 1] as string;
-    if (!SINGULARIZE_EXCLUDE.has(last) && !last.endsWith("ss")) {
-      const singular = BERRY_SUFFIX_RE.test(last)
-        ? last.replace(BERRY_SUFFIX_RE, "berry")
-        : PLURAL_MAP[last] ?? (S_PLURAL_WORDS.has(last) ? last.slice(0, -1) : undefined);
-      if (singular) {
-        removed.push(`${last}→${singular}`);
-        words[words.length - 1] = singular;
-        text = words.join(" ");
-      }
-    }
-  }
-  // Step 15: garnish-like, stripping a trailing "for garnish" note.
+
+  // Steps 10, 12, 13, 14, 15 (finishCore, above) run on every alternative,
+  // not just `text` - resolveLine matches candidates against `alternatives`,
+  // so an unnormalized alternative would never resolve the way its core does.
+  let infused = false;
   let garnishLike = garnishLikeFromAmount;
-  if (strip(/\bfor garnish$/i, "")) garnishLike = true;
-  const lastWord = text.split(" ").filter(Boolean).pop();
-  if (lastWord && GARNISH_WORDS.has(lastWord)) garnishLike = true;
+  if (alternatives) {
+    const finished = alternatives.map((alt) => finishCore(alt, removed));
+    alternatives = finished.map((f) => f.text);
+    for (const f of finished) {
+      infused = infused || f.infused;
+      garnishLike = garnishLike || f.garnishLike;
+    }
+    text = alternatives[0] as string;
+  } else {
+    const finished = finishCore(text, removed);
+    text = finished.text;
+    infused = finished.infused;
+    garnishLike = garnishLike || finished.garnishLike;
+  }
   // Step 16: final trim; fall back to the step-1 string if core is empty.
   const core = text.trim() || fallback;
   const result: PreprocessedIngredient = {

@@ -55,12 +55,14 @@ async function main(): Promise<void> {
   let linesTotal = 0;
   let optionalLines = 0;
   let unresolvedLinesTotal = 0;
-  let droppedLinesTotal = 0;
+  let droppedOverrideTotal = 0;
+  let droppedOptionalTotal = 0;
   let unresolvedAlternativesTotal = 0;
   const sourceCounts: Record<ResolutionSource, number> = { override: 0, alias: 0, classification: 0, fallback: 0 };
   const categoryHitCounts = new Map<string, number>();
   let categoryHitsTotal = 0;
   const unresolvedCoreAgg = new Map<string, { count: number; exampleSlug: string }>();
+  const optionalDroppedCoreAgg = new Map<string, { count: number; exampleSlug: string }>();
   const requiresLengthHistogram = new Map<string, number>();
   let requiresZero = 0;
 
@@ -101,8 +103,20 @@ async function main(): Promise<void> {
           optionalLines++;
           break;
         case "dropped":
-          // Every candidate was overridden to null: not an ingredient at all.
-          droppedLinesTotal++;
+          if (resolution.reason === "override") {
+            // Every candidate was overridden to null: not an ingredient at all.
+            droppedOverrideTotal++;
+          } else {
+            // No candidate resolved, but the line is optional or garnish-like
+            // so it never blocks the recipe; still worth surfacing to curation.
+            droppedOptionalTotal++;
+            const agg = optionalDroppedCoreAgg.get(processed.core);
+            if (agg) {
+              agg.count++;
+            } else {
+              optionalDroppedCoreAgg.set(processed.core, { count: 1, exampleSlug: cached.slug });
+            }
+          }
           break;
         case "unresolved": {
           unresolved.push(resolution.unresolved);
@@ -152,7 +166,14 @@ async function main(): Promise<void> {
   const unresolvedRows = [...unresolvedCoreAgg.entries()]
     .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
     .map(([core, agg]) => `${agg.count}\t${core}\t${agg.exampleSlug}`);
-  await fsp.writeFile(UNRESOLVED_PATH, unresolvedRows.join("\n") + (unresolvedRows.length > 0 ? "\n" : ""), "utf8");
+  // Optional/garnish-like lines that never blocked a recipe, but still have
+  // no resolution: a third column marks them so they aren't mistaken for the
+  // blocking kind above.
+  const optionalDroppedRows = [...optionalDroppedCoreAgg.entries()]
+    .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+    .map(([core, agg]) => `${agg.count}\t${core}\t${agg.exampleSlug}\toptional`);
+  const allUnresolvedRows = [...unresolvedRows, ...optionalDroppedRows];
+  await fsp.writeFile(UNRESOLVED_PATH, allUnresolvedRows.join("\n") + (allUnresolvedRows.length > 0 ? "\n" : ""), "utf8");
 
   // --- stats ---
 
@@ -174,7 +195,8 @@ async function main(): Promise<void> {
   console.log(`  resolved via fallback:       ${sourceCounts.fallback}`);
   console.log(`  unresolved:                ${unresolvedLinesTotal}`);
   console.log(`  optional:                  ${optionalLines}`);
-  console.log(`  dropped by override:       ${droppedLinesTotal}`);
+  console.log(`  dropped by override:       ${droppedOverrideTotal}`);
+  console.log(`  dropped, optional/garnish-like, unresolved: ${droppedOptionalTotal}`);
   console.log("");
   console.log(`Category hits: ${categoryHitsTotal}`);
   const topCategoryHits = [...categoryHitCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
@@ -192,6 +214,14 @@ async function main(): Promise<void> {
     console.log(`  ${agg.count}\t${core}`);
   }
   console.log("");
+  console.log(`Top 20 unresolved optional/garnish-like cores (dropped, not blocking):`);
+  const topOptionalDropped = [...optionalDroppedCoreAgg.entries()]
+    .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+    .slice(0, 20);
+  for (const [core, agg] of topOptionalDropped) {
+    console.log(`  ${agg.count}\t${core}`);
+  }
+  console.log("");
   console.log(`requires.length distribution (recipes in output):`);
   console.log(`  0:    ${requiresZero}`);
   for (const bucket of ["1-3", "4-5", "6-7", "8+"]) {
@@ -199,7 +229,9 @@ async function main(): Promise<void> {
   }
   console.log("");
   console.log(`Wrote ${recipes.length} recipes to ${RECIPES_PATH}`);
-  console.log(`Wrote ${unresolvedRows.length} unresolved cores to ${UNRESOLVED_PATH}`);
+  console.log(
+    `Wrote ${unresolvedRows.length} unresolved cores and ${optionalDroppedRows.length} optional/garnish-like dropped cores to ${UNRESOLVED_PATH}`,
+  );
 }
 
 main().catch((err) => {
