@@ -4,14 +4,9 @@
 // same strings grouped by their deterministically preprocessed "core" name.
 // No LLM classification happens here.
 
-import * as fs from "node:fs/promises";
-import {
-  listCachedPunchFiles,
-  readCachedPunchRecipe,
-  extractPreferred,
-  stripHtml,
-} from "./lib/punchdrink-cache.js";
-import { preprocessIngredient, mentionsEditorsNote } from "./lib/preprocess.js";
+import { listCachedPunchFiles, readCachedPunchRecipe, ingredientLines } from "./lib/punchdrink-cache.js";
+import { preprocessIngredient } from "./lib/preprocess.js";
+import { writeJson, type RawIngredientsFile, type PreprocessedFile } from "./lib/data-files.js";
 import { INGREDIENTS_RAW_PATH, INGREDIENTS_PREPROCESSED_PATH } from "./lib/paths.js";
 
 interface RawAgg {
@@ -39,23 +34,17 @@ async function main() {
 
   for (const filepath of files) {
     const cached = await readCachedPunchRecipe(filepath);
-    const meta = cached.dataLayer.pagePostTerms?.meta;
-    if (!meta) continue;
+    if (!cached.dataLayer.pagePostTerms?.meta) continue;
     recipeCount++;
 
-    const ingredientCount = Number(meta.ingredients || 0);
-    for (let i = 0; i < ingredientCount; i++) {
-      const item = stripHtml(String(meta[`ingredients_${i}_ingredient`] ?? "")).trim();
-      if (!item) continue;
-      const description = String(meta[`ingredients_${i}_description`] ?? "").trim();
-
+    for (const { raw, description } of ingredientLines(cached)) {
       lineCount++;
 
       // --- raw aggregation ---
-      let rawEntry = rawAgg.get(item);
+      let rawEntry = rawAgg.get(raw);
       if (!rawEntry) {
         rawEntry = { count: 0, slugs: [] };
-        rawAgg.set(item, rawEntry);
+        rawAgg.set(raw, rawEntry);
       }
       rawEntry.count++;
       if (rawEntry.slugs.length < 3 && !rawEntry.slugs.includes(cached.slug)) {
@@ -63,17 +52,10 @@ async function main() {
       }
 
       // --- deterministic preprocessing ---
-      const processed = preprocessIngredient(item);
+      const processed = preprocessIngredient(raw, description);
       for (const fragment of processed.removed) {
         removedCounts.set(fragment, (removedCounts.get(fragment) ?? 0) + 1);
       }
-
-      // Description carries its own brand recommendation and can name the
-      // house-made editor's note independently of the ingredient field.
-      const { preferred: descPreferred } = extractPreferred(description);
-      const houseMadeFromDescription = mentionsEditorsNote(description);
-      const preferred = processed.preferred ?? descPreferred;
-      const houseMade = processed.flags.houseMade || houseMadeFromDescription;
 
       let coreEntry = coreAgg.get(processed.core);
       if (!coreEntry) {
@@ -87,12 +69,14 @@ async function main() {
         coreAgg.set(processed.core, coreEntry);
       }
       coreEntry.count++;
-      coreEntry.rawCounts.set(item, (coreEntry.rawCounts.get(item) ?? 0) + 1);
-      if (houseMade) coreEntry.flags.houseMade++;
+      coreEntry.rawCounts.set(raw, (coreEntry.rawCounts.get(raw) ?? 0) + 1);
+      if (processed.flags.houseMade) coreEntry.flags.houseMade++;
       if (processed.flags.optional) coreEntry.flags.optional++;
       if (processed.flags.infused) coreEntry.flags.infused++;
       if (processed.flags.garnishLike) coreEntry.flags.garnishLike++;
-      if (preferred) coreEntry.preferred.set(preferred, (coreEntry.preferred.get(preferred) ?? 0) + 1);
+      if (processed.preferred) {
+        coreEntry.preferred.set(processed.preferred, (coreEntry.preferred.get(processed.preferred) ?? 0) + 1);
+      }
       if (coreEntry.slugs.length < 3 && !coreEntry.slugs.includes(cached.slug)) {
         coreEntry.slugs.push(cached.slug);
       }
@@ -106,7 +90,7 @@ async function main() {
     .map(([raw, agg]) => ({ raw, count: agg.count, slugs: agg.slugs }))
     .sort((a, b) => b.count - a.count || a.raw.localeCompare(b.raw));
 
-  const rawOutput = {
+  const rawOutput: RawIngredientsFile = {
     generatedAt,
     recipes: recipeCount,
     lines: lineCount,
@@ -136,17 +120,14 @@ async function main() {
     })
     .sort((a, b) => b.count - a.count || a.core.localeCompare(b.core));
 
-  const preprocessedOutput = {
+  const preprocessedOutput: PreprocessedFile = {
     generatedAt,
     distinctCores: coreItems.length,
     items: coreItems,
   };
 
-  await fs.writeFile(INGREDIENTS_RAW_PATH, JSON.stringify(rawOutput, null, 2) + "\n");
-  await fs.writeFile(
-    INGREDIENTS_PREPROCESSED_PATH,
-    JSON.stringify(preprocessedOutput, null, 2) + "\n"
-  );
+  writeJson(INGREDIENTS_RAW_PATH, rawOutput);
+  writeJson(INGREDIENTS_PREPROCESSED_PATH, preprocessedOutput);
 
   // --- summary ---
   const singletonCores = coreItems.filter((c) => c.count === 1);

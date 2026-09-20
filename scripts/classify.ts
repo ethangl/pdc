@@ -11,36 +11,38 @@
 //   --dry-run       print what would happen; make no API calls
 //   --only-review   classify only items whose current committed status is
 //                   "review" or "none" (for re-checking after a prompt change)
-//   --rederive      rebuild every kept item's record from its cached Jev
-//                   response instead of trusting the prior output file
-//                   verbatim (for re-deriving status after a status-logic
-//                   change, e.g. a new taxonomy fallback, with no API calls)
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { TypeSafeClient } from "@typesafe-ai/sdk";
 import { loadTaxonomy, type Taxonomy } from "./lib/taxonomy.js";
 import { loadLocalEnv } from "./lib/env.js";
-import { OVERRIDES_PATH, CLASSIFICATIONS_PATH, JEV_CACHE_DIR, REVIEW_DIR, INGREDIENTS_PREPROCESSED_PATH } from "./lib/paths.js";
+import { CLASSIFICATIONS_PATH, JEV_CACHE_DIR, REVIEW_DIR } from "./lib/paths.js";
 import {
   MODEL,
   PROMPT_VERSION,
   buildState,
   buildRootQuestions,
   buildNodeQuestions,
-  cacheKeyFor,
   buildRecord,
   errorRecord,
   overrideRecord,
   createJevClient,
-  type PreprocessedItem,
+  readJevCache,
+  writeJevCache,
   type CachedResponse,
-  type ClassificationRecord,
-  type ClassificationStatus,
 } from "./lib/jev.js";
+import {
+  readPreprocessed,
+  readOverrides,
+  readClassifications,
+  writeJson,
+  type PreprocessedItem,
+  type ClassificationItem,
+  type ClassificationsFile,
+  type ClassificationStatus,
+} from "./lib/data-files.js";
 
-const PREPROCESSED_PATH = INGREDIENTS_PREPROCESSED_PATH;
-const OUTPUT_PATH = CLASSIFICATIONS_PATH;
-const CACHE_DIR = JEV_CACHE_DIR;
 const REVIEW_PATH = path.join(REVIEW_DIR, "review.txt");
 // Jev's documented limit is 1,200 requests/minute (20/s). 8 in flight stays
 // well under that even at low per-request latency; 429s still back off via
@@ -66,7 +68,6 @@ interface Args {
   refresh: boolean;
   dryRun: boolean;
   onlyReview: boolean;
-  rederive: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -75,7 +76,6 @@ function parseArgs(argv: string[]): Args {
   let refresh = false;
   let dryRun = false;
   let onlyReview = false;
-  let rederive = false;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--limit") {
       const value = Number(argv[i + 1]);
@@ -91,79 +91,9 @@ function parseArgs(argv: string[]): Args {
       dryRun = true;
     } else if (argv[i] === "--only-review") {
       onlyReview = true;
-    } else if (argv[i] === "--rederive") {
-      rederive = true;
     }
   }
-  return { limit, minCount, refresh, dryRun, onlyReview, rederive };
-}
-
-interface PreprocessedFile {
-  generatedAt: string;
-  distinctCores: number;
-  items: PreprocessedItem[];
-}
-
-/** The narrower shape committed to curated/classifications.json. */
-interface OutputItem {
-  core: string;
-  count: number;
-  status: ClassificationStatus;
-  root: string | null;
-  rootConfidence: number | null;
-  node: string | null;
-  nodeConfidence: number | null;
-  rawNodeChoice: string | null;
-  collapsed: boolean;
-  isBrand: number | null;
-  isHousePrep: number | null;
-  isGarnish: number | null;
-  rootTop3: Record<string, number> | null;
-  nodeTop3: Record<string, number> | null;
-  nodeProbabilities: Record<string, number> | null;
-  fallbackApplied?: boolean;
-}
-
-interface OutputFile {
-  generatedAt: string;
-  taxonomyVersion: number;
-  promptVersion: string;
-  model: string;
-  items: OutputItem[];
-}
-
-function toOutputItem(record: ClassificationRecord): OutputItem {
-  return {
-    core: record.core,
-    count: record.count,
-    status: record.status,
-    root: record.root,
-    rootConfidence: record.rootConfidence,
-    node: record.node,
-    nodeConfidence: record.nodeConfidence,
-    rawNodeChoice: record.rawNodeChoice,
-    collapsed: record.collapsed,
-    isBrand: record.isBrand,
-    isHousePrep: record.isHousePrep,
-    isGarnish: record.isGarnish,
-    rootTop3: record.rootTop3,
-    nodeTop3: record.nodeTop3,
-    nodeProbabilities: record.nodeProbabilities,
-    ...(record.fallbackApplied ? { fallbackApplied: true } : {}),
-  };
-}
-
-function loadOverrides(): Record<string, string | null> {
-  if (!fs.existsSync(OVERRIDES_PATH)) {
-    fs.writeFileSync(OVERRIDES_PATH, "{}\n", "utf8");
-    return {};
-  }
-  return JSON.parse(fs.readFileSync(OVERRIDES_PATH, "utf8"));
-}
-
-function loadExistingOutput(): OutputFile | null {
-  if (!fs.existsSync(OUTPUT_PATH)) return null;
-  return JSON.parse(fs.readFileSync(OUTPUT_PATH, "utf8"));
+  return { limit, minCount, refresh, dryRun, onlyReview };
 }
 
 const STATUS_ORDER: Record<ClassificationStatus, number> = {
@@ -175,7 +105,7 @@ const STATUS_ORDER: Record<ClassificationStatus, number> = {
   error: 5,
 };
 
-function sortItems(items: OutputItem[]): OutputItem[] {
+function sortItems(items: ClassificationItem[]): ClassificationItem[] {
   return [...items].sort((a, b) => {
     const statusDiff = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
     if (statusDiff !== 0) return statusDiff;
@@ -195,20 +125,59 @@ function fmt(n: number): string {
   return n.toFixed(2);
 }
 
+interface ApiResult {
+  record: ClassificationItem;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** Runs the two-request Jev classification for one item and writes its cache
+ * entry. A request failure becomes an error record (logged once to stderr)
+ * rather than propagating. */
+async function classifyViaApi(client: TypeSafeClient, item: PreprocessedItem, taxonomy: Taxonomy): Promise<ApiResult> {
+  let calls = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  try {
+    const state = buildState(item);
+    const request1 = await client.systemOne({ state, questions: buildRootQuestions(taxonomy), model: MODEL });
+    calls++;
+    inputTokens += request1.usage.input_tokens;
+    outputTokens += request1.usage.output_tokens;
+
+    let request2: CachedResponse["request2"] = null;
+    const rootChoice = request1.answers.root.choice;
+    if (rootChoice !== "none") {
+      request2 = await client.systemOne({ state, questions: buildNodeQuestions(taxonomy, rootChoice), model: MODEL });
+      calls++;
+      inputTokens += request2.usage.input_tokens;
+      outputTokens += request2.usage.output_tokens;
+    }
+
+    const cached: CachedResponse = { request1, request2 };
+    writeJevCache(item.core, taxonomy, cached);
+    return { record: buildRecord(item, cached, taxonomy), calls, inputTokens, outputTokens };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`  ${item.core}: ${message}`);
+    return { record: errorRecord(item), calls, inputTokens, outputTokens };
+  }
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   loadLocalEnv();
 
   const taxonomy = loadTaxonomy();
-  const preprocessed = JSON.parse(fs.readFileSync(PREPROCESSED_PATH, "utf8")) as PreprocessedFile;
+  const preprocessed = readPreprocessed();
   const preprocessedByCore = new Map(preprocessed.items.map((item) => [item.core, item]));
 
-  const overrides = loadOverrides();
-  const existing = loadExistingOutput();
-  const versionMatches = existing !== null && existing.taxonomyVersion === taxonomy.version && existing.promptVersion === PROMPT_VERSION;
-  const priorMap = new Map<string, OutputItem>();
-  if (versionMatches) {
-    for (const item of existing!.items) priorMap.set(item.core, item);
+  const overrides = readOverrides();
+  const existing = readClassifications();
+  const priorMap = new Map<string, ClassificationItem>();
+  if (existing && existing.taxonomyVersion === taxonomy.version && existing.promptVersion === PROMPT_VERSION) {
+    for (const item of existing.items) priorMap.set(item.core, item);
   }
   const currentStatusByCore = new Map<string, ClassificationStatus>();
   if (existing) {
@@ -223,23 +192,31 @@ async function main(): Promise<void> {
     });
   }
 
-  // Classify decisions, without calling the API yet.
+  // Classify decisions, without calling the API yet. For each selected item
+  // that is not an override: refresh forces the API; otherwise a cached Jev
+  // response wins (rebuild is a pure function of the cache and the current
+  // taxonomy/status logic), else the prior committed item survives verbatim,
+  // else the API is called.
   const toOverride: PreprocessedItem[] = [];
-  const toKeep: OutputItem[] = [];
-  const toRederive: PreprocessedItem[] = [];
+  const toRebuild: { item: PreprocessedItem; cached: CachedResponse }[] = [];
+  const toKeep: ClassificationItem[] = [];
   const toClassify: PreprocessedItem[] = [];
   for (const item of selected) {
     if (Object.prototype.hasOwnProperty.call(overrides, item.core)) {
       toOverride.push(item);
       continue;
     }
-    if (!args.refresh && priorMap.has(item.core)) {
-      if (args.rederive) {
-        toRederive.push(item);
-      } else {
-        toKeep.push(priorMap.get(item.core)!);
+    if (!args.refresh) {
+      const cached = readJevCache(item.core, taxonomy);
+      if (cached) {
+        toRebuild.push({ item, cached });
+        continue;
       }
-      continue;
+      const prior = priorMap.get(item.core);
+      if (prior) {
+        toKeep.push(prior);
+        continue;
+      }
     }
     toClassify.push(item);
   }
@@ -247,8 +224,8 @@ async function main(): Promise<void> {
   if (args.dryRun) {
     console.log(`Items considered (unresolved, count >= ${args.minCount}): ${selected.length}`);
     console.log(`  Would apply overrides: ${toOverride.length}`);
-    console.log(`  Would keep prior output (unchanged): ${toKeep.length}`);
-    console.log(`  Would rederive from cache (no API calls): ${toRederive.length}`);
+    console.log(`  Would rederive from cache (no API calls): ${toRebuild.length}`);
+    console.log(`  Would keep prior output, no cache: ${toKeep.length}`);
     console.log(`  Would classify via Jev: ${toClassify.length}`);
     console.log(`Estimated requests: up to ${toClassify.length * 2} (2 per item; fewer when root resolves to "none")`);
     return;
@@ -263,91 +240,29 @@ async function main(): Promise<void> {
   }
   const client = apiKey ? createJevClient(apiKey) : null;
 
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  fs.mkdirSync(JEV_CACHE_DIR, { recursive: true });
 
-  let cacheHits = 0;
   let apiCalls = 0;
   let inputTokens = 0;
   let outputTokens = 0;
-  const statusCounts: Record<ClassificationStatus, number> = {
-    override: 0,
-    accepted: 0,
-    fallback: 0,
-    review: 0,
-    none: 0,
-    error: 0,
-  };
-  const freshlyBuilt: OutputItem[] = [];
+  const freshlyBuilt: ClassificationItem[] = [];
 
   for (const item of toOverride) {
     const nodeId = overrides[item.core];
-    const record = overrideRecord(item, taxonomy, nodeId, new Date().toISOString());
-    statusCounts[record.status]++;
-    freshlyBuilt.push(toOutputItem(record));
+    freshlyBuilt.push(overrideRecord(item, taxonomy, nodeId));
   }
 
-  // Rebuild each item's record from its cached Jev response, applying the
-  // current status-derivation logic (e.g. a taxonomy fallback change)
-  // without any new API calls.
-  for (const item of toRederive) {
-    const cacheKey = cacheKeyFor(item.core, taxonomy.version, PROMPT_VERSION);
-    const cachePath = path.join(CACHE_DIR, `${cacheKey}.json`);
-    if (!fs.existsSync(cachePath)) {
-      // No cached response to rebuild from (unexpected for a previously
-      // classified item): keep the prior record rather than losing it.
-      const prior = priorMap.get(item.core)!;
-      statusCounts[prior.status]++;
-      freshlyBuilt.push(prior);
-      continue;
-    }
-    const cached = JSON.parse(fs.readFileSync(cachePath, "utf8")) as CachedResponse;
-    const record = buildRecord(item, cached, new Date().toISOString(), taxonomy);
-    statusCounts[record.status]++;
-    freshlyBuilt.push(toOutputItem(record));
+  for (const { item, cached } of toRebuild) {
+    freshlyBuilt.push(buildRecord(item, cached, taxonomy));
   }
 
   let completed = 0;
   await runWithConcurrency(toClassify, CONCURRENCY, async (item) => {
-    const cacheKey = cacheKeyFor(item.core, taxonomy.version, PROMPT_VERSION);
-    const cachePath = path.join(CACHE_DIR, `${cacheKey}.json`);
-
-    let cached: CachedResponse | null = null;
-    if (!args.refresh && fs.existsSync(cachePath)) {
-      cached = JSON.parse(fs.readFileSync(cachePath, "utf8")) as CachedResponse;
-      cacheHits++;
-    }
-
-    let record: ClassificationRecord;
-    if (cached) {
-      record = buildRecord(item, cached, new Date().toISOString(), taxonomy);
-    } else {
-      try {
-        const state = buildState(item);
-        const request1 = await client!.systemOne({ state, questions: buildRootQuestions(taxonomy), model: MODEL });
-        apiCalls++;
-        inputTokens += request1.usage.input_tokens;
-        outputTokens += request1.usage.output_tokens;
-
-        let request2: CachedResponse["request2"] = null;
-        const rootChoice = request1.answers.root.choice;
-        if (rootChoice !== "none") {
-          request2 = await client!.systemOne({ state, questions: buildNodeQuestions(taxonomy, rootChoice), model: MODEL });
-          apiCalls++;
-          inputTokens += request2.usage.input_tokens;
-          outputTokens += request2.usage.output_tokens;
-        }
-
-        cached = { request1, request2 };
-        fs.writeFileSync(cachePath, JSON.stringify(cached, null, 2), "utf8");
-        record = buildRecord(item, cached, new Date().toISOString(), taxonomy);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        record = errorRecord(item, message, new Date().toISOString());
-      }
-    }
-
-    statusCounts[record.status]++;
-    freshlyBuilt.push(toOutputItem(record));
+    const result = await classifyViaApi(client!, item, taxonomy);
+    apiCalls += result.calls;
+    inputTokens += result.inputTokens;
+    outputTokens += result.outputTokens;
+    freshlyBuilt.push(result.record);
 
     completed++;
     if (completed % 100 === 0 || completed === toClassify.length) {
@@ -355,12 +270,8 @@ async function main(): Promise<void> {
     }
   });
 
-  for (const item of toKeep) {
-    statusCounts[item.status]++;
-  }
-
   // Merge: prior items (version-matched) survive unless this run replaced them.
-  const finalMap = new Map<string, OutputItem>(priorMap);
+  const finalMap = new Map<string, ClassificationItem>(priorMap);
   for (const item of freshlyBuilt) finalMap.set(item.core, item);
   for (const item of toKeep) finalMap.set(item.core, item);
   // Refresh counts from the current preprocessed file where available.
@@ -369,31 +280,69 @@ async function main(): Promise<void> {
     if (current) item.count = current.count;
   }
 
-  const output: OutputFile = {
+  const output: ClassificationsFile = {
     generatedAt: new Date().toISOString(),
     taxonomyVersion: taxonomy.version,
     promptVersion: PROMPT_VERSION,
     model: MODEL,
     items: sortItems([...finalMap.values()]),
   };
-  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(output, null, 2) + "\n", "utf8");
+  writeJson(CLASSIFICATIONS_PATH, output);
 
-  console.log(`Items considered: ${selected.length}`);
-  console.log(`  Overrides applied: ${toOverride.length}`);
-  console.log(`  Kept from prior output: ${toKeep.length}`);
-  console.log(`  Rederived from cache: ${toRederive.length}`);
-  console.log(`  Cache hits: ${cacheHits}`);
-  console.log(`  API calls made: ${apiCalls}`);
-  if (apiCalls > 0) {
-    console.log(`  Token usage: ${inputTokens} input, ${outputTokens} output`);
+  const statusCounts: Record<ClassificationStatus, number> = {
+    override: 0,
+    accepted: 0,
+    fallback: 0,
+    review: 0,
+    none: 0,
+    error: 0,
+  };
+  for (const record of [...freshlyBuilt, ...toKeep]) statusCounts[record.status]++;
+  const collapsedCount = freshlyBuilt.filter((item) => item.collapsed).length;
+
+  printReport(output, {
+    selected: selected.length,
+    overrides: toOverride.length,
+    rebuilt: toRebuild.length,
+    kept: toKeep.length,
+    apiCalls,
+    inputTokens,
+    outputTokens,
+    statusCounts,
+    collapsedCount,
+  });
+}
+
+interface RunStats {
+  selected: number;
+  overrides: number;
+  rebuilt: number;
+  kept: number;
+  apiCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  statusCounts: Record<ClassificationStatus, number>;
+  collapsedCount: number;
+}
+
+/** Everything printed and written after curated/classifications.json itself:
+ * the run summary, the review/none/fallback tables, the root distribution,
+ * and data/cache/review.txt. */
+function printReport(output: ClassificationsFile, stats: RunStats): void {
+  console.log(`Items considered: ${stats.selected}`);
+  console.log(`  Overrides applied: ${stats.overrides}`);
+  console.log(`  Rederived from cache: ${stats.rebuilt}`);
+  console.log(`  Kept from prior, no cache: ${stats.kept}`);
+  console.log(`  API calls made: ${stats.apiCalls}`);
+  if (stats.apiCalls > 0) {
+    console.log(`  Token usage: ${stats.inputTokens} input, ${stats.outputTokens} output`);
   }
   console.log("Status counts (this run's selection):");
-  for (const status of Object.keys(statusCounts) as ClassificationStatus[]) {
-    console.log(`  ${status}: ${statusCounts[status]}`);
+  for (const status of Object.keys(stats.statusCounts) as ClassificationStatus[]) {
+    console.log(`  ${status}: ${stats.statusCounts[status]}`);
   }
-  const collapsedCount = freshlyBuilt.filter((item) => item.collapsed).length;
-  console.log(`  collapsed (node raised to an ancestor): ${collapsedCount}`);
-  console.log(`Wrote ${output.items.length} items to ${OUTPUT_PATH}`);
+  console.log(`  collapsed (node raised to an ancestor): ${stats.collapsedCount}`);
+  console.log(`Wrote ${output.items.length} items to ${CLASSIFICATIONS_PATH}`);
   console.log("");
 
   const REPORT_TOP_N = 40;
@@ -401,11 +350,11 @@ async function main(): Promise<void> {
   const noneItems = output.items.filter((item) => item.status === "none");
 
   console.log(`Top ${Math.min(REPORT_TOP_N, reviewItems.length)} review items:`);
-  for (const item of reviewItems.slice(0, REPORT_TOP_N)) console.log(reportRow(item));
+  for (const item of reviewItems.slice(0, REPORT_TOP_N)) console.log(reviewRow(item));
   console.log("");
 
   console.log(`Top ${Math.min(REPORT_TOP_N, noneItems.length)} none items:`);
-  for (const item of noneItems.slice(0, REPORT_TOP_N)) console.log(reportRow(item));
+  for (const item of noneItems.slice(0, REPORT_TOP_N)) console.log(reviewRow(item));
   console.log("");
 
   // output.items is already sorted by status then count desc (sortItems),
@@ -413,7 +362,7 @@ async function main(): Promise<void> {
   const FALLBACK_REPORT_TOP_N = 30;
   const fallbackItems = output.items.filter((item) => item.status === "fallback");
   console.log(`Top ${Math.min(FALLBACK_REPORT_TOP_N, fallbackItems.length)} fallback items:`);
-  for (const item of fallbackItems.slice(0, FALLBACK_REPORT_TOP_N)) console.log(fallbackRow(item));
+  for (const item of fallbackItems.slice(0, FALLBACK_REPORT_TOP_N)) console.log(row(item, item.rawNodeChoice ?? "-"));
   console.log("");
 
   const rootDistribution = new Map<string, { items: number; occurrences: number }>();
@@ -431,7 +380,7 @@ async function main(): Promise<void> {
   }
   console.log("");
 
-  const reviewAndNoneLines = [...reviewItems, ...noneItems].map(reportRow);
+  const reviewAndNoneLines = [...reviewItems, ...noneItems].map(reviewRow);
   fs.writeFileSync(REVIEW_PATH, reviewAndNoneLines.join("\n") + "\n", "utf8");
   console.log(`Wrote ${reviewAndNoneLines.length} review+none lines to ${REVIEW_PATH}`);
 }
@@ -443,18 +392,16 @@ function formatTop3(top3: Record<string, number> | null): string {
     .join(", ");
 }
 
-/** `count core → node (root/node conf) raw choice`, per the fallback report brief. */
-function fallbackRow(item: OutputItem): string {
+/** `count core → node (root/node conf) tail`, shared by the review/none and fallback tables. */
+function row(item: ClassificationItem, tail: string): string {
   const rc = item.rootConfidence !== null ? fmt(item.rootConfidence) : "-";
   const nc = item.nodeConfidence !== null ? fmt(item.nodeConfidence) : "-";
-  return `${item.count}\t${item.core}\t→\t${item.node} (${rc}/${nc})\t${item.rawNodeChoice ?? "-"}`;
+  return `${item.count}\t${item.core}\t→\t${item.node ?? "(root none)"} (${rc}/${nc})\t${tail}`;
 }
 
-function reportRow(item: OutputItem): string {
-  const rc = item.rootConfidence !== null ? fmt(item.rootConfidence) : "-";
-  const nc = item.nodeConfidence !== null ? fmt(item.nodeConfidence) : "-";
-  const top3 = formatTop3(item.nodeTop3 ?? item.rootTop3);
-  return `${item.count}\t${item.core}\t→\t${item.node ?? "(root none)"} (${rc}/${nc})\t| ${top3}`;
+/** A review or none row: the row plus the top-3 probabilities of the deepest answered question. */
+function reviewRow(item: ClassificationItem): string {
+  return row(item, `| ${formatTop3(item.nodeTop3 ?? item.rootTop3)}`);
 }
 
 main().catch((err) => {

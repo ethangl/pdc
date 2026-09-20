@@ -2,27 +2,17 @@
 // parsing for scripts/classify.ts. Keeps classify.ts a thin driver.
 
 import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { TypeSafeClient, choice, noul, type ChoiceCriteria, type SystemOneResult } from "@typesafe-ai/sdk";
 import type { Taxonomy } from "./taxonomy.js";
+import { JEV_CACHE_DIR } from "./paths.js";
+import { writeJson, type PreprocessedItem, type ClassificationStatus, type ClassificationItem } from "./data-files.js";
 
 export const MODEL = "jev-latest";
 export const PROMPT_VERSION = "2";
 const CONFIDENCE_THRESHOLD = 0.9;
 const NONE = "none";
-
-export interface PreprocessedItem {
-  core: string;
-  count: number;
-  rawVariants: string[];
-  flags: {
-    houseMade: number;
-    optional: number;
-    infused: number;
-    garnishLike: number;
-  };
-  preferred?: string[];
-  slugs: string[];
-}
 
 export function createJevClient(apiKey: string): TypeSafeClient {
   return new TypeSafeClient({ apiKey, defaultModel: MODEL });
@@ -71,20 +61,8 @@ export function buildRootQuestions(taxonomy: Taxonomy) {
   };
 }
 
-/** All descendants of `id` at any depth, not including `id` itself. */
-function allDescendants(taxonomy: Taxonomy, id: string): string[] {
-  const result: string[] = [];
-  const stack = [...taxonomy.childrenOf(id)];
-  while (stack.length > 0) {
-    const nextId = stack.pop()!;
-    result.push(nextId);
-    stack.push(...taxonomy.childrenOf(nextId));
-  }
-  return result;
-}
-
 function nodeCriteria(taxonomy: Taxonomy, rootId: string): ChoiceCriteria {
-  const candidateIds = allDescendants(taxonomy, rootId).filter((id) => !taxonomy.isCategory(id));
+  const candidateIds = taxonomy.descendantsOf(rootId).filter((id) => !taxonomy.isCategory(id));
   if (!taxonomy.isCategory(rootId)) candidateIds.unshift(rootId);
 
   const criteria: Record<string, string> = {};
@@ -127,6 +105,21 @@ export function cacheKeyFor(core: string, taxonomyVersion: number, promptVersion
   return crypto.createHash("sha1").update(`${core}|${taxonomyVersion}|${promptVersion}`).digest("hex");
 }
 
+function cachePathFor(core: string, taxonomy: Taxonomy): string {
+  return path.join(JEV_CACHE_DIR, `${cacheKeyFor(core, taxonomy.version, PROMPT_VERSION)}.json`);
+}
+
+/** The cached Jev response for `core`, or null when nothing is cached. */
+export function readJevCache(core: string, taxonomy: Taxonomy): CachedResponse | null {
+  const cachePath = cachePathFor(core, taxonomy);
+  if (!fs.existsSync(cachePath)) return null;
+  return JSON.parse(fs.readFileSync(cachePath, "utf8")) as CachedResponse;
+}
+
+export function writeJevCache(core: string, taxonomy: Taxonomy, response: CachedResponse): void {
+  writeJson(cachePathFor(core, taxonomy), response);
+}
+
 function top3(probabilities: Record<string, number>): Record<string, number> {
   return Object.fromEntries(Object.entries(probabilities).sort((a, b) => b[1] - a[1]).slice(0, 3));
 }
@@ -140,7 +133,7 @@ function top3(probabilities: Record<string, number>): Record<string, number> {
  */
 function subtreeMass(taxonomy: Taxonomy, nodeId: string, probabilities: Record<string, number>, candidateIds: Set<string>): number {
   let mass = probabilities[nodeId] ?? 0;
-  for (const descendantId of allDescendants(taxonomy, nodeId)) {
+  for (const descendantId of taxonomy.descendantsOf(nodeId)) {
     if (candidateIds.has(descendantId)) mass += probabilities[descendantId] ?? 0;
   }
   return mass;
@@ -179,30 +172,25 @@ function collapseNode(taxonomy: Taxonomy, rawChoice: string, probabilities: Reco
   return { node: best!.node, nodeConfidence: best!.mass, collapsed: best!.node !== rawChoice };
 }
 
-export type ClassificationStatus = "accepted" | "review" | "none" | "error" | "override" | "fallback";
-
-export interface ClassificationRecord {
-  core: string;
-  count: number;
-  status: ClassificationStatus;
-  root: string | null;
-  rootConfidence: number | null;
-  rootTop3: Record<string, number> | null;
-  node: string | null;
-  nodeConfidence: number | null;
-  nodeTop3: Record<string, number> | null;
-  nodeProbabilities: Record<string, number> | null;
-  rawNodeChoice: string | null;
-  collapsed: boolean;
-  isBrand: number | null;
-  isHousePrep: number | null;
-  isGarnish: number | null;
-  model: string | null;
-  promptVersion: string;
-  classifiedAt: string;
-  error?: string;
-  /** True when `node`/`status` were replaced by the root's fallback (see applyFallback). */
-  fallbackApplied?: boolean;
+/** Every nullable field null, ready for a builder to overwrite what it knows. */
+function emptyRecord(item: PreprocessedItem, status: ClassificationStatus): ClassificationItem {
+  return {
+    core: item.core,
+    count: item.count,
+    status,
+    root: null,
+    rootConfidence: null,
+    node: null,
+    nodeConfidence: null,
+    rawNodeChoice: null,
+    collapsed: false,
+    isBrand: null,
+    isHousePrep: null,
+    isGarnish: null,
+    rootTop3: null,
+    nodeTop3: null,
+    nodeProbabilities: null,
+  };
 }
 
 function statusFor(root: string, node: string | null, nodeConfidence: number | null): ClassificationStatus {
@@ -236,7 +224,7 @@ function applyFallback(
 }
 
 /** Turns the two raw API responses (request2 may be skipped) into the committed record shape. */
-export function buildRecord(item: PreprocessedItem, cached: CachedResponse, classifiedAt: string, taxonomy: Taxonomy): ClassificationRecord {
+export function buildRecord(item: PreprocessedItem, cached: CachedResponse, taxonomy: Taxonomy): ClassificationItem {
   const rootAnswer = cached.request1.answers.root;
   const { isBrand, isHousePrep, isGarnish } = cached.request1.answers;
 
@@ -265,9 +253,7 @@ export function buildRecord(item: PreprocessedItem, cached: CachedResponse, clas
   const fallback = applyFallback(taxonomy, root, rootConfidence, baseStatus, node);
 
   return {
-    core: item.core,
-    count: item.count,
-    status: fallback.status,
+    ...emptyRecord(item, fallback.status),
     root,
     rootConfidence,
     rootTop3,
@@ -280,68 +266,22 @@ export function buildRecord(item: PreprocessedItem, cached: CachedResponse, clas
     isBrand: isBrand.noul,
     isHousePrep: isHousePrep.noul,
     isGarnish: isGarnish.noul,
-    model: cached.request1.model,
-    promptVersion: PROMPT_VERSION,
-    classifiedAt,
     ...(fallback.fallbackApplied ? { fallbackApplied: true } : {}),
   };
 }
 
-/** A record for an item that failed classification (network/API error). */
-export function errorRecord(item: PreprocessedItem, message: string, classifiedAt: string): ClassificationRecord {
-  return {
-    core: item.core,
-    count: item.count,
-    status: "error",
-    root: null,
-    rootConfidence: null,
-    rootTop3: null,
-    node: null,
-    nodeConfidence: null,
-    nodeTop3: null,
-    nodeProbabilities: null,
-    rawNodeChoice: null,
-    collapsed: false,
-    isBrand: null,
-    isHousePrep: null,
-    isGarnish: null,
-    model: null,
-    promptVersion: PROMPT_VERSION,
-    classifiedAt,
-    error: message,
-  };
+/** A record for an item that failed classification (network/API error). The
+ * error message is not part of the committed shape. */
+export function errorRecord(item: PreprocessedItem): ClassificationItem {
+  return emptyRecord(item, "error");
 }
 
 /** A record for an item resolved by curated/overrides.json, skipping the API entirely. */
-export function overrideRecord(
-  item: PreprocessedItem,
-  taxonomy: Taxonomy,
-  nodeId: string | null,
-  classifiedAt: string,
-): ClassificationRecord {
-  let root: string | null = null;
-  if (nodeId !== null) {
-    const ancestors = taxonomy.ancestorsOf(nodeId);
-    root = ancestors.length > 0 ? ancestors[ancestors.length - 1] : nodeId;
-  }
+export function overrideRecord(item: PreprocessedItem, taxonomy: Taxonomy, nodeId: string | null): ClassificationItem {
+  const root = nodeId !== null ? taxonomy.rootOf(nodeId) : null;
   return {
-    core: item.core,
-    count: item.count,
-    status: "override",
+    ...emptyRecord(item, "override"),
     root,
-    rootConfidence: null,
-    rootTop3: null,
     node: nodeId,
-    nodeConfidence: null,
-    nodeTop3: null,
-    nodeProbabilities: null,
-    rawNodeChoice: null,
-    collapsed: false,
-    isBrand: null,
-    isHousePrep: null,
-    isGarnish: null,
-    model: null,
-    promptVersion: PROMPT_VERSION,
-    classifiedAt,
   };
 }

@@ -8,32 +8,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { validateTaxonomy, taxonomyFromRaw, type Taxonomy } from "./lib/taxonomy.js";
-import { TAXONOMY_PATH, INGREDIENTS_PREPROCESSED_PATH, REVIEW_DIR } from "./lib/paths.js";
+import { TAXONOMY_PATH, REVIEW_DIR } from "./lib/paths.js";
+import { readPreprocessed, type PreprocessedItem } from "./lib/data-files.js";
 
-const PREPROCESSED_PATH = INGREDIENTS_PREPROCESSED_PATH;
-const OUT_DIR = REVIEW_DIR;
-const OUT_PATH = path.join(OUT_DIR, "coverage-unmatched.txt");
+const OUT_PATH = path.join(REVIEW_DIR, "coverage-unmatched.txt");
 const DEFAULT_LIMIT = 150;
-
-interface PreprocessedItem {
-  core: string;
-  count: number;
-  rawVariants: string[];
-  flags: {
-    houseMade: number;
-    optional: number;
-    infused: number;
-    garnishLike: number;
-  };
-  preferred?: string[];
-  slugs: string[];
-}
-
-interface PreprocessedFile {
-  generatedAt: string;
-  distinctCores: number;
-  items: PreprocessedItem[];
-}
 
 function parseArgs(argv: string[]): { limit: number; noValidate: boolean } {
   let limit = DEFAULT_LIMIT;
@@ -67,11 +46,6 @@ function loadTaxonomyForCoverage(noValidate: boolean): Taxonomy {
   return taxonomyFromRaw(raw);
 }
 
-function getRoot(taxonomy: Taxonomy, id: string): string {
-  const ancestors = taxonomy.ancestorsOf(id);
-  return ancestors.length > 0 ? ancestors[ancestors.length - 1] : id;
-}
-
 function formatPercent(part: number, total: number): string {
   if (total === 0) return "0.0%";
   return `${((part / total) * 100).toFixed(1)}%`;
@@ -88,7 +62,7 @@ function main(): void {
   const { limit, noValidate } = parseArgs(process.argv.slice(2));
   const taxonomy = loadTaxonomyForCoverage(noValidate);
 
-  const preprocessed = JSON.parse(fs.readFileSync(PREPROCESSED_PATH, "utf8")) as PreprocessedFile;
+  const preprocessed = readPreprocessed();
   const items = preprocessed.items;
 
   const resolved = items.map((item) => ({ item, nodeId: taxonomy.resolveAlias(item.core) }));
@@ -120,7 +94,7 @@ function main(): void {
 
   const rootHistogram = new Map<string, number>();
   for (const entry of coveredEntries) {
-    const root = getRoot(taxonomy, entry.nodeId!);
+    const root = taxonomy.rootOf(entry.nodeId!);
     rootHistogram.set(root, (rootHistogram.get(root) ?? 0) + entry.item.count);
   }
   const rootRows = [...rootHistogram.entries()].sort((a, b) => b[1] - a[1]);
@@ -146,7 +120,7 @@ function main(): void {
   for (const line of unmatchedLines) console.log(line);
   console.log("");
 
-  fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.mkdirSync(REVIEW_DIR, { recursive: true });
   fs.writeFileSync(OUT_PATH, unmatchedLines.join("\n") + "\n", "utf8");
   console.log(`Wrote ${unmatchedTop.length} unmatched cores to ${OUT_PATH}`);
   console.log("");

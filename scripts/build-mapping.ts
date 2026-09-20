@@ -3,25 +3,19 @@
 // punchdrink recipe to the taxonomy node ids it requires. Reads the
 // punchdrink cache, curated/taxonomy.json, curated/overrides.json, and
 // curated/classifications.json; writes no cache of its own besides the
-// unresolved-cores report. See AGENTS.md for the resolution rules.
+// unresolved-cores report. See docs/DESIGN.md for the resolution rules.
 //
 // Run with `pnpm mapping`.
 
-import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import { loadTaxonomy } from "./lib/taxonomy.js";
-import {
-  listCachedPunchFiles,
-  readCachedPunchRecipe,
-  extractRecipeName,
-  extractPreferred,
-  stripHtml,
-} from "./lib/punchdrink-cache.js";
-import { preprocessIngredient, mentionsEditorsNote } from "./lib/preprocess.js";
+import { listCachedPunchFiles, readCachedPunchRecipe, extractRecipeName, ingredientLines } from "./lib/punchdrink-cache.js";
+import { preprocessIngredient } from "./lib/preprocess.js";
 import {
   resolveLine,
   dedupeRequirements,
+  classificationLookup,
   type ResolveDeps,
   type RecipeMapping,
   type RecipesFile,
@@ -29,50 +23,10 @@ import {
   type UnresolvedLine,
   type ResolutionSource,
 } from "./lib/mapping.js";
-import { OVERRIDES_PATH, CLASSIFICATIONS_PATH, RECIPES_PATH, REVIEW_DIR } from "./lib/paths.js";
+import { readOverrides, readClassifications, writeJson } from "./lib/data-files.js";
+import { RECIPES_PATH, REVIEW_DIR } from "./lib/paths.js";
 
-const OUTPUT_PATH = RECIPES_PATH;
 const UNRESOLVED_PATH = path.join(REVIEW_DIR, "mapping-unresolved.txt");
-
-interface ClassificationItem {
-  core: string;
-  status: "override" | "accepted" | "fallback" | "review" | "none" | "error";
-  node: string | null;
-}
-
-interface ClassificationsFile {
-  taxonomyVersion: number;
-  promptVersion: string;
-  items: ClassificationItem[];
-}
-
-function loadOverrides(): Record<string, string | null> {
-  if (!fs.existsSync(OVERRIDES_PATH)) return {};
-  return JSON.parse(fs.readFileSync(OVERRIDES_PATH, "utf8"));
-}
-
-interface Classifications {
-  /** Accepted/override classifications only: core -> node id. */
-  classifications: Map<string, string>;
-  /** Fallback classifications only: core -> the family's fallback node id. */
-  fallbackClassifications: Map<string, string>;
-}
-
-function loadClassifications(): Classifications {
-  const classifications = new Map<string, string>();
-  const fallbackClassifications = new Map<string, string>();
-  if (!fs.existsSync(CLASSIFICATIONS_PATH)) return { classifications, fallbackClassifications };
-  const file = JSON.parse(fs.readFileSync(CLASSIFICATIONS_PATH, "utf8")) as ClassificationsFile;
-  for (const item of file.items) {
-    if (typeof item.node !== "string") continue;
-    if (item.status === "accepted" || item.status === "override") {
-      classifications.set(item.core, item.node);
-    } else if (item.status === "fallback") {
-      fallbackClassifications.set(item.core, item.node);
-    }
-  }
-  return { classifications, fallbackClassifications };
-}
 
 function bucketFor(count: number): string {
   if (count <= 3) return "1-3";
@@ -83,13 +37,13 @@ function bucketFor(count: number): string {
 
 async function main(): Promise<void> {
   const taxonomy = loadTaxonomy();
-  const overrides = loadOverrides();
-  const { classifications, fallbackClassifications } = loadClassifications();
+  const overrides = readOverrides();
+  const classificationsFile = readClassifications();
+  const classifications = classificationLookup(classificationsFile?.items ?? []);
 
   const deps: ResolveDeps = {
     overrides,
     classifications,
-    fallbackClassifications,
     resolveAlias: taxonomy.resolveAlias,
     isCategory: taxonomy.isCategory,
   };
@@ -113,36 +67,22 @@ async function main(): Promise<void> {
 
   for (const filepath of files) {
     const cached = await readCachedPunchRecipe(filepath);
-    const meta = cached.dataLayer.pagePostTerms?.meta;
-    const ingredientCount = meta ? Number(meta.ingredients || 0) : 0;
+    const lines = ingredientLines(cached);
+
+    if (lines.length === 0) {
+      recipesSkippedNoLines++;
+      continue;
+    }
 
     const requires: Requirement[] = [];
     const optional: Requirement[] = [];
     const unresolved: UnresolvedLine[] = [];
-    let sawLine = false;
 
-    for (let i = 0; i < ingredientCount; i++) {
-      const item = stripHtml(String(meta![`ingredients_${i}_ingredient`] ?? "")).trim();
-      if (!item) continue;
-      sawLine = true;
+    for (const { raw, description } of lines) {
       linesTotal++;
 
-      const description = String(meta![`ingredients_${i}_description`] ?? "").trim();
-      const processed = preprocessIngredient(item);
-      const { preferred: descPreferred } = extractPreferred(description);
-      void descPreferred; // brand recommendations are discarded, per docs/DESIGN.md
-      const houseMade = processed.flags.houseMade || mentionsEditorsNote(description);
-
-      const resolution = resolveLine(
-        {
-          raw: item,
-          core: processed.core,
-          alternatives: processed.alternatives,
-          flags: { optional: processed.flags.optional, garnishLike: processed.flags.garnishLike },
-        },
-        houseMade,
-        deps
-      );
+      const processed = preprocessIngredient(raw, description);
+      const resolution = resolveLine(processed, deps);
 
       for (const candidate of resolution.resolvedCandidates) {
         sourceCounts[candidate.source]++;
@@ -173,11 +113,6 @@ async function main(): Promise<void> {
       }
     }
 
-    if (!sawLine) {
-      recipesSkippedNoLines++;
-      continue;
-    }
-
     const dedupedRequires = dedupeRequirements(requires);
 
     const mapping: RecipeMapping = {
@@ -206,7 +141,7 @@ async function main(): Promise<void> {
     recipes,
   };
 
-  await fsp.writeFile(OUTPUT_PATH, JSON.stringify(output, null, 2) + "\n", "utf8");
+  writeJson(RECIPES_PATH, output);
 
   await fsp.mkdir(REVIEW_DIR, { recursive: true });
   const unresolvedRows = [...unresolvedCoreAgg.entries()]
@@ -258,7 +193,7 @@ async function main(): Promise<void> {
     console.log(`  ${bucket}:  ${requiresLengthHistogram.get(bucket) ?? 0}`);
   }
   console.log("");
-  console.log(`Wrote ${recipes.length} recipes to ${OUTPUT_PATH}`);
+  console.log(`Wrote ${recipes.length} recipes to ${RECIPES_PATH}`);
   console.log(`Wrote ${unresolvedRows.length} unresolved cores to ${UNRESOLVED_PATH}`);
 }
 

@@ -1,7 +1,10 @@
 // Types and pure resolution logic for the app-facing recipe mapping
-// (data/recipes.json). See AGENTS.md's brief for scripts/build-mapping.ts,
-// which is the thin driver that calls resolveLine and dedupeRequirements
-// for every cached recipe's ingredient lines.
+// (data/recipes.json). See docs/DESIGN.md for the resolution rules;
+// scripts/build-mapping.ts is the thin driver that calls resolveLine and
+// dedupeRequirements for every cached recipe's ingredient lines.
+
+import type { PreprocessedIngredient } from "./preprocess.js";
+import type { ClassificationItem, Overrides } from "./data-files.js";
 
 export interface Requirement {
   nodes: string[];
@@ -38,26 +41,27 @@ export type ResolutionSource = "override" | "alias" | "classification" | "fallba
 
 export interface ResolveDeps {
   /** curated/overrides.json: exact core -> node id, or null meaning "no ingredient". */
-  overrides: Record<string, string | null>;
-  /** Accepted/override classifications only: core -> node id. */
-  classifications: Map<string, string>;
-  /** Fallback classifications only: core -> the family's fallback node id.
-   * Resolves like `classifications`, but the resulting requirement is
-   * flagged `substitute`. */
-  fallbackClassifications: Map<string, string>;
+  overrides: Overrides;
+  /** core -> node, from accepted, override, and fallback classifications. */
+  classifications: Map<string, { nodeId: string; source: "classification" | "fallback" }>;
   resolveAlias: (core: string) => string | undefined;
   isCategory: (nodeId: string) => boolean;
 }
 
-/** The subset of a preprocessed ingredient line that resolveLine needs. */
-export interface LineInput {
-  raw: string;
-  core: string;
-  alternatives?: string[];
-  flags: {
-    optional: boolean;
-    garnishLike: boolean;
-  };
+/** core -> node, keyed for resolveCandidate: accepted/override classifications
+ * resolve as "classification", fallback classifications as "fallback".
+ * Items with no node (status not yet resolved to one) are skipped. */
+export function classificationLookup(items: ClassificationItem[]): ResolveDeps["classifications"] {
+  const lookup: ResolveDeps["classifications"] = new Map();
+  for (const item of items) {
+    if (typeof item.node !== "string") continue;
+    if (item.status === "accepted" || item.status === "override") {
+      lookup.set(item.core, { nodeId: item.node, source: "classification" });
+    } else if (item.status === "fallback") {
+      lookup.set(item.core, { nodeId: item.node, source: "fallback" });
+    }
+  }
+  return lookup;
 }
 
 export type LineBucket = "requires" | "optional" | "unresolved" | "dropped";
@@ -90,33 +94,31 @@ type CandidateResult =
   | { status: "category"; nodeId: string }
   | { status: "none" };
 
+/** Tries override, then alias, then classification/fallback, in that order;
+ * the first hit wins. Applies the category check once, to whichever hit was
+ * found. */
 function resolveCandidate(candidate: string, deps: ResolveDeps): CandidateResult {
+  let hit: { nodeId: string; source: ResolutionSource } | undefined;
+
   if (Object.prototype.hasOwnProperty.call(deps.overrides, candidate)) {
     const nodeId = deps.overrides[candidate];
     if (nodeId === null) return { status: "dropped" };
-    if (deps.isCategory(nodeId)) return { status: "category", nodeId };
-    return { status: "resolved", nodeId, source: "override" };
+    hit = { nodeId, source: "override" };
+  } else {
+    const aliasHit = deps.resolveAlias(candidate);
+    if (aliasHit !== undefined) {
+      hit = { nodeId: aliasHit, source: "alias" };
+    } else {
+      const classificationHit = deps.classifications.get(candidate);
+      if (classificationHit !== undefined) {
+        hit = { nodeId: classificationHit.nodeId, source: classificationHit.source };
+      }
+    }
   }
 
-  const aliasHit = deps.resolveAlias(candidate);
-  if (aliasHit !== undefined) {
-    if (deps.isCategory(aliasHit)) return { status: "category", nodeId: aliasHit };
-    return { status: "resolved", nodeId: aliasHit, source: "alias" };
-  }
-
-  const classificationHit = deps.classifications.get(candidate);
-  if (classificationHit !== undefined) {
-    if (deps.isCategory(classificationHit)) return { status: "category", nodeId: classificationHit };
-    return { status: "resolved", nodeId: classificationHit, source: "classification" };
-  }
-
-  const fallbackHit = deps.fallbackClassifications.get(candidate);
-  if (fallbackHit !== undefined) {
-    if (deps.isCategory(fallbackHit)) return { status: "category", nodeId: fallbackHit };
-    return { status: "resolved", nodeId: fallbackHit, source: "fallback" };
-  }
-
-  return { status: "none" };
+  if (!hit) return { status: "none" };
+  if (deps.isCategory(hit.nodeId)) return { status: "category", nodeId: hit.nodeId };
+  return { status: "resolved", nodeId: hit.nodeId, source: hit.source };
 }
 
 /**
@@ -124,7 +126,7 @@ function resolveCandidate(candidate: string, deps: ResolveDeps): CandidateResult
  * aliases, and classifications, per docs/DESIGN.md and the mapping brief.
  * Pure: takes its dependencies as arguments, makes no I/O.
  */
-export function resolveLine(line: LineInput, houseMade: boolean, deps: ResolveDeps): LineResolution {
+export function resolveLine(line: PreprocessedIngredient, deps: ResolveDeps): LineResolution {
   const candidates = line.alternatives ?? [line.core];
 
   const resolvedNodes: string[] = [];
@@ -175,8 +177,8 @@ export function resolveLine(line: LineInput, houseMade: boolean, deps: ResolveDe
     };
   }
 
-  const requirement: Requirement = { nodes: resolvedNodes, houseMade, raw: line.raw };
-  const allSubstitute = resolvedCandidates.length > 0 && resolvedCandidates.every((c) => c.source === "fallback");
+  const requirement: Requirement = { nodes: resolvedNodes, houseMade: line.flags.houseMade, raw: line.raw };
+  const allSubstitute = resolvedCandidates.every((c) => c.source === "fallback");
   if (allSubstitute) requirement.substitute = true;
   const isOptional = line.flags.optional || line.flags.garnishLike;
 
@@ -202,13 +204,12 @@ export function dedupeRequirements(requirements: Requirement[]): Requirement[] {
     const key = JSON.stringify(req.nodes);
     const existing = byKey.get(key);
     if (existing) {
-      existing.houseMade = existing.houseMade || req.houseMade;
-      const merged = (existing.substitute ?? false) && (req.substitute ?? false);
-      if (merged) {
-        existing.substitute = true;
-      } else {
-        delete existing.substitute;
-      }
+      byKey.set(key, {
+        nodes: existing.nodes,
+        houseMade: existing.houseMade || req.houseMade,
+        raw: existing.raw,
+        ...(existing.substitute && req.substitute ? { substitute: true } : {}),
+      });
     } else {
       byKey.set(key, { ...req });
       order.push(key);

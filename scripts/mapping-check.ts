@@ -6,10 +6,10 @@ import {
   resolveLine,
   dedupeRequirements,
   type ResolveDeps,
-  type LineInput,
   type LineResolution,
   type Requirement,
 } from "./lib/mapping.js";
+import type { PreprocessedIngredient } from "./lib/preprocess.js";
 
 // --- a small in-memory taxonomy stand-in ---
 
@@ -28,17 +28,15 @@ const OVERRIDES: Record<string, string | null> = {
   "unicorn tears": null,
 };
 
-const CLASSIFICATIONS = new Map<string, string>([
-  ["fancy gin", "gin"],
-  ["vanilla syrup", "vanilla-syrup"],
+const CLASSIFICATIONS = new Map<string, { nodeId: string; source: "classification" | "fallback" }>([
+  ["fancy gin", { nodeId: "gin", source: "classification" }],
+  ["vanilla syrup", { nodeId: "vanilla-syrup", source: "classification" }],
+  ["mystery syrup", { nodeId: "simple-syrup", source: "fallback" }],
 ]);
-
-const FALLBACK_CLASSIFICATIONS = new Map<string, string>([["mystery syrup", "simple-syrup"]]);
 
 const deps: ResolveDeps = {
   overrides: OVERRIDES,
   classifications: CLASSIFICATIONS,
-  fallbackClassifications: FALLBACK_CLASSIFICATIONS,
   resolveAlias: (core) => ALIASES[core],
   isCategory: (id) => CATEGORY_IDS.has(id),
 };
@@ -47,20 +45,20 @@ function line(partial: {
   core: string;
   raw?: string;
   alternatives?: string[];
-  flags?: Partial<LineInput["flags"]>;
-}): LineInput {
+  flags?: Partial<PreprocessedIngredient["flags"]>;
+}): PreprocessedIngredient {
   return {
     raw: partial.raw ?? partial.core,
     core: partial.core,
     alternatives: partial.alternatives,
-    flags: { optional: false, garnishLike: false, ...partial.flags },
+    flags: { houseMade: false, optional: false, infused: false, garnishLike: false, ...partial.flags },
+    removed: [],
   };
 }
 
 interface Case {
   name: string;
-  input: LineInput;
-  houseMade?: boolean;
+  input: PreprocessedIngredient;
   expectBucket: LineResolution["bucket"];
   expectNodes?: string[];
   expectHouseMade?: boolean;
@@ -116,8 +114,7 @@ const cases: Case[] = [
   },
   {
     name: "houseMade from description",
-    input: line({ core: "vanilla syrup" }),
-    houseMade: true,
+    input: line({ core: "vanilla syrup", flags: { houseMade: true } }),
     expectBucket: "requires",
     expectNodes: ["vanilla-syrup"],
     expectHouseMade: true,
@@ -150,7 +147,7 @@ const cases: Case[] = [
 let failures = 0;
 
 for (const testCase of cases) {
-  const result = resolveLine(testCase.input, testCase.houseMade ?? false, deps);
+  const result = resolveLine(testCase.input, deps);
   const problems: string[] = [];
 
   if (result.bucket !== testCase.expectBucket) {

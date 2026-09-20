@@ -18,14 +18,14 @@ Design and decisions are in `docs/DESIGN.md`.
 - `pnpm classify` — classify unresolved strings with Jev (needs
   `TYPESAFE_API_KEY` in `.env.local`). Cached under `data/cache/jev/`.
   Flags: `--limit N`, `--min-count N`, `--only-review`, `--refresh`,
-  `--rederive`, `--dry-run`.
+  `--dry-run`.
 - `pnpm mapping:check` — run the line-resolution assertion cases.
 - `pnpm mapping` — write `data/recipes.json`, the app-facing file.
 
 Curation loop after a change to the tree, the preprocessor, or the overrides:
 
 ```bash
-pnpm extract && pnpm coverage && pnpm classify -- --rederive && pnpm mapping
+pnpm extract && pnpm coverage && pnpm classify && pnpm mapping
 ```
 
 ## Data

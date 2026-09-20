@@ -18,6 +18,22 @@ export interface PreprocessedIngredient {
 // trail as "..., preferably X" / "(such as X)" / "..., ideally X".
 const PREFERRED_RE = /\b(?:preferably|such as|ideally)\b\s+(.+)$/i;
 
+// Punchdrink ingredient descriptions carry the same brand recommendations as
+// a trailing clause. Pull the brand back out of the description when the
+// ingredient field itself did not carry one.
+export function extractPreferred(rawDescription: string): string | undefined {
+  const cleaned = stripHtml(rawDescription)
+    .replace(/^\(|\)$/g, "")
+    .replace(/^[\s,;]+/, "")
+    .trim();
+  if (!cleaned) return undefined;
+
+  const match = cleaned.match(PREFERRED_RE);
+  if (!match) return undefined;
+
+  return match[1].replace(/[\s).,;]+$/, "").trim() || undefined;
+}
+
 // The opening "(" is required, but some source data closes it with "}"
 // instead of ")" ("(see editor's note}"), and some descriptions carry the
 // phrase with no brackets at all ("see Editor's Note"). Tolerate both.
@@ -298,15 +314,11 @@ function stripUnbalancedParens(text: string, removed: string[]): string {
   return trimPunctuation(result);
 }
 
-export function preprocessIngredient(raw: string): PreprocessedIngredient {
+export function preprocessIngredient(raw: string, description = ""): PreprocessedIngredient {
   const removed: string[] = [];
-
-  // Step 1: normalize Unicode to NFC (some source strings use decomposed
-  // accents, e.g. "curac + combining cedilla", which otherwise miss taxonomy
-  // aliases written in precomposed form), strip HTML, strip trademark/footnote
-  // marks and quoted-word wrapping, trim, collapse whitespace, normalize
-  // quotes/dashes.
-  let stageA = stripHtml(raw.normalize("NFC"))
+  // Step 1: normalize Unicode (NFC, so decomposed accents match taxonomy
+  // aliases), strip HTML/trademark marks/quoted-word wrapping, tidy whitespace.
+  let text = stripHtml(raw.normalize("NFC"))
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
     .replace(/[®™]/g, "")
@@ -316,122 +328,77 @@ export function preprocessIngredient(raw: string): PreprocessedIngredient {
     .trim()
     .replace(/\*+$/, "")
     .trim();
-
-  const fallback = stageA.toLowerCase();
-
-  // Step 2: house-made editor's-note marker. Extracted case-sensitively so
-  // preferred-brand casing (step 6) survives; everything lowercases after.
-  let houseMade = false;
-  const houseMadeMatch = stageA.match(HOUSE_MADE_RE);
-  if (houseMadeMatch) {
-    houseMade = true;
-    removed.push(houseMadeMatch[0]);
-    stageA = trimPunctuation(stageA.replace(HOUSE_MADE_RE, " "));
-  }
-
-  // Step 3: optional markers, including single-word trailing descriptor
-  // parentheticals ("(chilled)", "(crushed)", "(cold)", "(hot)"). Runs before
-  // the preferred-brand step (step 6) so trailing "to top"/"(optional)"
-  // markers aren't swallowed into the preferred text.
-  let optional = false;
-  for (const re of OPTIONAL_RES) {
-    const match = stageA.match(re);
-    if (match) {
-      optional = true;
-      removed.push(match[0].trim());
-      stageA = trimPunctuation(stageA.replace(re, " "));
-    }
-  }
-  const descriptorParenMatch = stageA.match(TRAILING_DESCRIPTOR_PAREN_RE);
-  if (descriptorParenMatch) {
-    removed.push(descriptorParenMatch[0].trim());
-    stageA = trimPunctuation(stageA.replace(TRAILING_DESCRIPTOR_PAREN_RE, " "));
-  }
-
-  // Step 4: leading ratio or percentage ("2:1 honey syrup", "20% saline
-  // solution", "20 percent saline solution").
-  for (const re of LEADING_RATIO_RES) {
-    const match = stageA.match(re);
-    if (match) {
-      removed.push(match[0].trim());
-      stageA = trimPunctuation(stageA.replace(re, ""));
-      break;
-    }
-  }
-
-  // Step 5: leaked amounts. Leading parenthetical amount ("(750 ml) vodka"),
-  // trailing "(N proof)", leading count+unit ("1 dash vanilla extract"), and
-  // "juice of"/"zest of"/"peel of"/"rind of" transforms.
-  const leadingParenMatch = stageA.match(LEADING_PAREN_AMOUNT_RE);
-  if (leadingParenMatch) {
-    removed.push(leadingParenMatch[0].trim());
-    stageA = trimPunctuation(stageA.replace(LEADING_PAREN_AMOUNT_RE, ""));
-  }
-  const trailingProofMatch = stageA.match(TRAILING_PROOF_PAREN_RE);
-  if (trailingProofMatch) {
-    removed.push(trailingProofMatch[0].trim());
-    stageA = trimPunctuation(stageA.replace(TRAILING_PROOF_PAREN_RE, ""));
-  }
-  const countUnitMatch = stageA.match(LEADING_COUNT_UNIT_RE);
-  if (countUnitMatch) {
-    removed.push(countUnitMatch[0].trim());
-    stageA = trimPunctuation(stageA.replace(LEADING_COUNT_UNIT_RE, ""));
-  }
+  const fallback = text.toLowerCase();
+  // Removes the first match of `re` from `text`, records the fragment, trims. True when it fired.
+  const strip = (re: RegExp, replacement = " "): boolean => {
+    const match = text.match(re);
+    if (!match) return false;
+    removed.push(match[0].trim());
+    text = trimPunctuation(text.replace(re, replacement));
+    return true;
+  };
+  // Step 2: house-made editor's-note marker (case-sensitive: step 6's brand
+  // casing must survive; text lowercases at step 7).
+  let houseMade = mentionsEditorsNote(description);
+  if (strip(HOUSE_MADE_RE)) houseMade = true;
+  // Step 3: optional markers and single-word descriptor parentheticals, run
+  // before the preferred-brand step (6) so they aren't swallowed into it.
+  const optional = OPTIONAL_RES.map((re) => strip(re)).includes(true);
+  strip(TRAILING_DESCRIPTOR_PAREN_RE);
+  // Step 4: leading ratio or percentage ("2:1 honey syrup", "20% saline solution").
+  for (const re of LEADING_RATIO_RES) if (strip(re, "")) break;
+  // Step 5: leaked amounts, and "juice of"/"zest of"/"peel of"/"rind of".
+  strip(LEADING_PAREN_AMOUNT_RE, "");
+  strip(TRAILING_PROOF_PAREN_RE, "");
+  strip(LEADING_COUNT_UNIT_RE, "");
   let garnishLikeFromAmount = false;
-  const juiceOfMatch = stageA.match(JUICE_OF_RE);
+  const juiceOfMatch = text.match(JUICE_OF_RE);
   if (juiceOfMatch) {
-    removed.push(stageA);
-    stageA = `${juiceOfMatch[1]} juice`;
+    removed.push(text);
+    text = `${juiceOfMatch[1]} juice`;
   } else {
-    const zestOfMatch = stageA.match(ZEST_OF_RE);
+    const zestOfMatch = text.match(ZEST_OF_RE);
     if (zestOfMatch) {
       const kind = zestOfMatch[1]?.toLowerCase() === "peels" ? "peel" : zestOfMatch[1]?.toLowerCase();
-      removed.push(stageA);
-      stageA = `${zestOfMatch[2]} ${kind}`;
+      removed.push(text);
+      text = `${zestOfMatch[2]} ${kind}`;
       garnishLikeFromAmount = true;
     }
   }
-
-  // Step 6: preferred brand.
+  // Step 6: preferred brand, falling back to the description's own.
   let preferred: string | undefined;
-  const preferredMatch = stageA.match(PREFERRED_RE);
+  const preferredMatch = text.match(PREFERRED_RE);
   if (preferredMatch && preferredMatch.index !== undefined) {
     preferred = preferredMatch[1].replace(/[\s).,;]+$/, "").trim() || undefined;
-    removed.push(stageA.slice(preferredMatch.index).trim());
-    stageA = trimPunctuation(stageA.slice(0, preferredMatch.index).replace(/[\s(]+$/, ""));
+    removed.push(text.slice(preferredMatch.index).trim());
+    text = trimPunctuation(text.slice(0, preferredMatch.index).replace(/[\s(]+$/, ""));
   }
-
+  if (!preferred) preferred = extractPreferred(description);
   // Step 7: a "(" left dangling by step 6, or a stray trailing ")"/"}".
-  stageA = stripUnbalancedParens(stageA, removed);
-
-  // From here on we work lowercase.
-  let working = stageA.toLowerCase();
-
+  text = stripUnbalancedParens(text, removed);
+  text = text.toLowerCase(); // from here on we work lowercase
   // Step 8: ratio parentheticals, then any remaining long parenthetical (>25 chars).
-  working = working.replace(RATIO_PAREN_RE, (match) => {
-    removed.push(match);
-    return " ";
-  });
-  working = trimPunctuation(working);
-  working = working.replace(/\([^()]*\)/g, (match) => {
-    if (match.length > 25) {
+  text = trimPunctuation(
+    text.replace(RATIO_PAREN_RE, (match) => {
       removed.push(match);
       return " ";
-    }
-    return match;
-  });
-  working = trimPunctuation(working);
-
-  // Step 9: alternatives ("a or b", "a (or b)", "a, or b"). Split at most
-  // once. When the first option is a lone adjective missing the shared noun
-  // ("fino or manzanilla sherry"), borrow the second option's last word,
-  // unless the first option already stands alone (STANDALONE_INGREDIENT_WORDS).
-  // Leading-modifier stripping (step 11) runs on every alternative, not just
-  // the core, so it happens here too, before that borrowing decision.
+    }),
+  );
+  text = trimPunctuation(
+    text.replace(/\([^()]*\)/g, (match) => {
+      if (match.length <= 25) return match;
+      removed.push(match);
+      return " ";
+    }),
+  );
+  // Step 9: alternatives ("a or b", "a (or b)", "a, or b"). A lone-adjective
+  // first option ("fino or manzanilla sherry") borrows the second option's
+  // last word unless it stands alone (STANDALONE_INGREDIENT_WORDS). Leading
+  // modifiers (step 11) strip from each branch here, before that decision.
   let alternatives: string[] | undefined;
   let alt1: string | undefined;
   let alt2: string | undefined;
-  const orParenMatch = working.match(/^(.*?)\s*\(\s*or\s+([^)]+?)\s*\)\s*(.*)$/i);
+  const orParenMatch = text.match(/^(.*?)\s*\(\s*or\s+([^)]+?)\s*\)\s*(.*)$/i);
   if (orParenMatch) {
     const prefix = orParenMatch[1].trim();
     const altWord = orParenMatch[2].trim();
@@ -440,7 +407,7 @@ export function preprocessIngredient(raw: string): PreprocessedIngredient {
     alt2 = suffix ? `${altWord} ${suffix}`.trim() : altWord;
     removed.push(orParenMatch[0].trim());
   } else {
-    const orMatch = working.match(/^(.+?),?\s+\bor\b\s+(.+)$/i);
+    const orMatch = text.match(/^(.+?),?\s+\bor\b\s+(.+)$/i);
     if (orMatch) {
       alt1 = orMatch[1].trim();
       alt2 = orMatch[2].trim();
@@ -452,99 +419,56 @@ export function preprocessIngredient(raw: string): PreprocessedIngredient {
     const alt2Stripped = stripLeadingModifiers(alt2, removed);
     const alt1Words = alt1Stripped.split(" ").filter(Boolean);
     const alt2Words = alt2Stripped.split(" ").filter(Boolean);
-    let finalAlt1 = alt1Stripped;
-    if (
-      alt1Words.length === 1 &&
-      alt2Words.length >= 2 &&
-      !STANDALONE_INGREDIENT_WORDS.has(alt1Words[0] as string)
-    ) {
-      finalAlt1 = `${alt1Stripped} ${alt2Words[alt2Words.length - 1]}`;
-    }
+    const finalAlt1 =
+      alt1Words.length === 1 && alt2Words.length >= 2 && !STANDALONE_INGREDIENT_WORDS.has(alt1Words[0] as string)
+        ? `${alt1Stripped} ${alt2Words[alt2Words.length - 1]}`
+        : alt1Stripped;
     alternatives = [finalAlt1, alt2Stripped];
-    working = finalAlt1;
+    text = finalAlt1;
   }
   const hadAlternatives = alternatives !== undefined;
-
-  // Step 10: infusion / wash.
+  // Step 10: infusion / wash transform.
   let infused = false;
-  const infusionMatch = working.match(INFUSION_RE);
+  const infusionMatch = text.match(INFUSION_RE);
   if (infusionMatch) {
     infused = true;
     removed.push(`${infusionMatch[1]}-${infusionMatch[2]}`);
-    working = infusionMatch[3].trim();
+    text = infusionMatch[3].trim();
   }
-
-  // Step 11: strip leading modifiers, repeatedly (protected phrases block
-  // this). Alternatives already ran this per-branch above (step 9); running
-  // it again here on an alt1 that borrowed a trailing noun (e.g. "crushed
-  // ice") would wrongly re-strip a modifier word now that it has a noun
-  // after it.
-  if (!hadAlternatives) {
-    working = stripLeadingModifiers(working, removed);
-  }
-
+  // Step 11: strip leading modifiers repeatedly (protected phrases block
+  // this); skipped when step 9 already ran it per-branch, since re-running
+  // on a borrowed trailing noun would wrongly strip a word.
+  if (!hadAlternatives) text = stripLeadingModifiers(text, removed);
   // Step 12: proof/age qualifiers ("overproof" is a style word, not stripped).
   let changed = true;
   while (changed) {
     changed = false;
-    for (const re of PROOF_AGE_RES) {
-      const match = working.match(re);
-      if (match) {
-        removed.push(match[0].trim());
-        working = working.replace(re, "");
-        changed = true;
-      }
-    }
+    for (const re of PROOF_AGE_RES) if (strip(re, "")) changed = true;
   }
-
-  // Step 13: trailing clauses ("chilled", "to taste", "divided", and prep
-  // notes after a comma like ", washed and pitted").
-  const trailingMatch = working.match(TRAILING_CLAUSE_RE);
-  if (trailingMatch) {
-    removed.push(trailingMatch[0].trim());
-    working = working.replace(TRAILING_CLAUSE_RE, "");
-  }
-  working = trimPunctuation(working);
-
+  // Step 13: trailing clauses ("chilled", "to taste", "divided", prep notes).
+  strip(TRAILING_CLAUSE_RE, "");
   // Step 14: singularize the last word for a small, safe set of plural nouns.
-  const words = working.split(" ").filter(Boolean);
+  const words = text.split(" ").filter(Boolean);
   if (words.length > 0) {
     const last = words[words.length - 1] as string;
     if (!SINGULARIZE_EXCLUDE.has(last) && !last.endsWith("ss")) {
-      let singular: string | undefined;
-      if (BERRY_SUFFIX_RE.test(last)) {
-        singular = last.replace(BERRY_SUFFIX_RE, "berry");
-      } else if (PLURAL_MAP[last]) {
-        singular = PLURAL_MAP[last];
-      } else if (S_PLURAL_WORDS.has(last)) {
-        singular = last.slice(0, -1);
-      }
+      const singular = BERRY_SUFFIX_RE.test(last)
+        ? last.replace(BERRY_SUFFIX_RE, "berry")
+        : PLURAL_MAP[last] ?? (S_PLURAL_WORDS.has(last) ? last.slice(0, -1) : undefined);
       if (singular) {
         removed.push(`${last}→${singular}`);
         words[words.length - 1] = singular;
-        working = words.join(" ");
+        text = words.join(" ");
       }
     }
   }
-
-  // Step 15: garnish-like. Strip a trailing "for garnish" note once flagged.
+  // Step 15: garnish-like, stripping a trailing "for garnish" note.
   let garnishLike = garnishLikeFromAmount;
-  if (/\bfor garnish$/i.test(working)) {
-    garnishLike = true;
-    removed.push("for garnish");
-    working = trimPunctuation(working.replace(/\bfor garnish$/i, ""));
-  }
-  const lastWord = working.split(" ").filter(Boolean).pop();
-  if (lastWord && GARNISH_WORDS.has(lastWord)) {
-    garnishLike = true;
-  }
-
+  if (strip(/\bfor garnish$/i, "")) garnishLike = true;
+  const lastWord = text.split(" ").filter(Boolean).pop();
+  if (lastWord && GARNISH_WORDS.has(lastWord)) garnishLike = true;
   // Step 16: final trim; fall back to the step-1 string if core is empty.
-  let core = working.trim();
-  if (!core) {
-    core = fallback;
-  }
-
+  const core = text.trim() || fallback;
   const result: PreprocessedIngredient = {
     raw,
     core,

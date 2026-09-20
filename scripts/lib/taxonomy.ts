@@ -30,30 +30,26 @@ export interface Taxonomy {
   childrenOf(id: string): string[];
   /** Nearest ancestor first, excludes the node itself. */
   ancestorsOf(id: string): string[];
+  /** Every descendant at any depth, excludes `id` itself. Order not significant. */
+  descendantsOf(id: string): string[];
   isCategory(id: string): boolean;
   /** Matches a lowercase preprocessed core against node ids, node names, and aliases. */
   resolveAlias(core: string): string | undefined;
   /** The node id `rootId`'s subtree resolves to when a confident answer cannot be placed more specifically. */
   fallbackFor(rootId: string): string | undefined;
+  /** The topmost ancestor of `id`, or `id` itself when it has no parent. */
+  rootOf(id: string): string;
 }
 
 const ID_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const MAX_DEPTH = 4;
 
-export function validateTaxonomy(raw: unknown): string[] {
+/** Shape checks on the raw node array alone: no id refers to another node,
+ * no tree is walked. Run before the structural checks in `validateTaxonomy`,
+ * which need a `Taxonomy` built from data that already passes this stage. */
+function validateShape(nodes: TaxonomyNode[]): string[] {
   const problems: string[] = [];
 
-  if (typeof raw !== "object" || raw === null) {
-    return ["Taxonomy file must contain a JSON object."];
-  }
-
-  const file = raw as RawTaxonomyFile;
-  if (!Array.isArray(file.nodes)) {
-    return ["Taxonomy file must have a `nodes` array."];
-  }
-  const nodes = file.nodes as TaxonomyNode[];
-
-  // Unique, well-formed ids.
   const seenIds = new Set<string>();
   for (const node of nodes) {
     if (typeof node.id !== "string" || !node.id) {
@@ -81,10 +77,40 @@ export function validateTaxonomy(raw: unknown): string[] {
     }
   }
 
+  for (const node of nodes) {
+    if (typeof node.id !== "string") continue;
+    if (typeof node.name !== "string") {
+      problems.push(`Node ${node.id} has a non-string name: ${JSON.stringify(node.name)}`);
+    }
+    if (node.kind !== undefined && node.kind !== "category") {
+      problems.push(`Node ${node.id} has an unknown kind: ${JSON.stringify(node.kind)}`);
+    }
+    if (node.fallback !== undefined && typeof node.fallback !== "string") {
+      problems.push(`Node ${node.id} has a non-string fallback: ${JSON.stringify(node.fallback)}`);
+    }
+    if (node.aliases) {
+      for (const alias of node.aliases) {
+        if (typeof alias !== "string") {
+          problems.push(`Node ${node.id} has a non-string alias: ${JSON.stringify(alias)}`);
+        }
+      }
+    }
+  }
+
+  return problems;
+}
+
+/** Structural checks against a built `Taxonomy`: cycles, alias rules,
+ * category rules, fallback targets, and max depth. Assumes the raw data
+ * already passed `validateShape`. */
+function validateStructure(nodes: TaxonomyNode[], taxonomy: Taxonomy): string[] {
+  const problems: string[] = [];
+  const byId = taxonomy.nodes;
+
   // Cycles.
   const inCycle = new Set<string>();
   for (const node of nodes) {
-    if (typeof node.id !== "string" || inCycle.has(node.id)) continue;
+    if (inCycle.has(node.id)) continue;
     const chain: string[] = [node.id];
     const visited = new Set<string>([node.id]);
     let cursor: TaxonomyNode = node;
@@ -107,22 +133,16 @@ export function validateTaxonomy(raw: unknown): string[] {
 
   // Aliases: lowercase/trimmed, unique across nodes, and distinct from any
   // other node's id or name.
-  const idSet = seenIds;
+  const idSet = new Set(nodes.map((node) => node.id));
   const nameOwner = new Map<string, string>();
   for (const node of nodes) {
-    if (typeof node.name === "string" && typeof node.id === "string") {
-      nameOwner.set(node.name.toLowerCase(), node.id);
-    }
+    nameOwner.set(node.name.toLowerCase(), node.id);
   }
 
   const aliasOwner = new Map<string, string>();
   for (const node of nodes) {
-    if (typeof node.id !== "string" || !node.aliases) continue;
+    if (!node.aliases) continue;
     for (const alias of node.aliases) {
-      if (typeof alias !== "string") {
-        problems.push(`Node ${node.id} has a non-string alias: ${JSON.stringify(alias)}`);
-        continue;
-      }
       if (alias !== alias.trim() || alias !== alias.toLowerCase()) {
         problems.push(`Node ${node.id} has an alias that is not lowercase and trimmed: ${JSON.stringify(alias)}`);
       }
@@ -150,10 +170,6 @@ export function validateTaxonomy(raw: unknown): string[] {
     if (node.parent) childCount.set(node.parent, (childCount.get(node.parent) ?? 0) + 1);
   }
   for (const node of nodes) {
-    if (typeof node.id !== "string") continue;
-    if (node.kind !== undefined && node.kind !== "category") {
-      problems.push(`Node ${node.id} has an unknown kind: ${JSON.stringify(node.kind)}`);
-    }
     if (node.kind === "category") {
       if ((childCount.get(node.id) ?? 0) === 0) {
         problems.push(`Category node ${node.id} has no children (category nodes cannot be leaves)`);
@@ -167,11 +183,7 @@ export function validateTaxonomy(raw: unknown): string[] {
   // Fallbacks: must point to an existing non-category node that is a
   // descendant of the node carrying the fallback.
   for (const node of nodes) {
-    if (typeof node.id !== "string" || node.fallback === undefined) continue;
-    if (typeof node.fallback !== "string") {
-      problems.push(`Node ${node.id} has a non-string fallback: ${JSON.stringify(node.fallback)}`);
-      continue;
-    }
+    if (typeof node.fallback !== "string") continue;
     const target = byId.get(node.fallback);
     if (!target) {
       problems.push(`Node ${node.id} has a fallback to an unknown node: ${node.fallback}`);
@@ -181,7 +193,7 @@ export function validateTaxonomy(raw: unknown): string[] {
       problems.push(`Node ${node.id} has a fallback to a category node: ${node.fallback}`);
       continue;
     }
-    if (!isDescendantOf(target, node.id, byId)) {
+    if (!taxonomy.ancestorsOf(node.fallback).includes(node.id)) {
       problems.push(`Node ${node.id} has a fallback that is not one of its descendants: ${node.fallback}`);
     }
   }
@@ -190,55 +202,34 @@ export function validateTaxonomy(raw: unknown): string[] {
   let maxDepth = 0;
   let deepestId: string | undefined;
   for (const node of nodes) {
-    if (typeof node.id !== "string") continue;
-    const depth = computeDepth(node, byId);
+    const depth = taxonomy.ancestorsOf(node.id).length;
     if (depth > maxDepth) {
       maxDepth = depth;
       deepestId = node.id;
     }
   }
   if (maxDepth > MAX_DEPTH && deepestId) {
-    const path: string[] = [];
-    let cursor: TaxonomyNode | undefined = byId.get(deepestId);
-    const seen = new Set<string>();
-    while (cursor && !seen.has(cursor.id)) {
-      path.unshift(cursor.id);
-      seen.add(cursor.id);
-      cursor = cursor.parent ? byId.get(cursor.parent) : undefined;
-    }
-    problems.push(`Depth ${maxDepth} exceeds the max of ${MAX_DEPTH}: ${path.join(" -> ")}`);
+    problems.push(`Depth ${maxDepth} exceeds the max of ${MAX_DEPTH}: ${[...taxonomy.ancestorsOf(deepestId).reverse(), deepestId].join(" -> ")}`);
   }
 
   return problems;
 }
 
-/** True if `node` descends from `ancestorId`, guarding against cycles. */
-function isDescendantOf(node: TaxonomyNode, ancestorId: string, byId: Map<string, TaxonomyNode>): boolean {
-  const seen = new Set<string>([node.id]);
-  let cursor: TaxonomyNode = node;
-  while (cursor.parent) {
-    if (cursor.parent === ancestorId) return true;
-    if (seen.has(cursor.parent)) break; // cycle; already reported separately
-    const parent = byId.get(cursor.parent);
-    if (!parent) break;
-    seen.add(parent.id);
-    cursor = parent;
+export function validateTaxonomy(raw: unknown): string[] {
+  if (typeof raw !== "object" || raw === null) {
+    return ["Taxonomy file must contain a JSON object."];
   }
-  return false;
-}
 
-function computeDepth(node: TaxonomyNode, byId: Map<string, TaxonomyNode>): number {
-  let depth = 0;
-  let cursor: TaxonomyNode = node;
-  const seen = new Set<string>([node.id]);
-  while (cursor.parent) {
-    const parent = byId.get(cursor.parent);
-    if (!parent || seen.has(parent.id)) break; // cycle; already reported separately
-    seen.add(parent.id);
-    cursor = parent;
-    depth++;
+  const file = raw as RawTaxonomyFile;
+  if (!Array.isArray(file.nodes)) {
+    return ["Taxonomy file must have a `nodes` array."];
   }
-  return depth;
+  const nodes = file.nodes as TaxonomyNode[];
+
+  const shapeProblems = validateShape(nodes);
+  if (shapeProblems.length > 0) return shapeProblems;
+
+  return validateStructure(nodes, taxonomyFromRaw(raw));
 }
 
 /** Builds a Taxonomy from raw, already-parsed JSON without validating it. */
@@ -304,15 +295,34 @@ export function taxonomyFromRaw(raw: unknown): Taxonomy {
     return nodes.get(rootId)?.fallback;
   }
 
+  /** Every descendant of `id` at any depth, not including `id` itself. */
+  function descendantsOf(id: string): string[] {
+    const result: string[] = [];
+    const stack = [...childrenOf(id)];
+    while (stack.length > 0) {
+      const nextId = stack.pop()!;
+      result.push(nextId);
+      stack.push(...childrenOf(nextId));
+    }
+    return result;
+  }
+
+  function rootOf(id: string): string {
+    const ancestors = ancestorsOf(id);
+    return ancestors.length > 0 ? ancestors[ancestors.length - 1]! : id;
+  }
+
   return {
     version: file.version,
     nodes,
     roots,
     childrenOf,
     ancestorsOf,
+    descendantsOf,
     isCategory,
     resolveAlias,
     fallbackFor,
+    rootOf,
   };
 }
 
