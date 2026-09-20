@@ -205,15 +205,19 @@ async function main(): Promise<void> {
   }
 
   // Classify decisions, without calling the API yet. For each selected item
-  // that is not an override: refresh forces the API; otherwise a cached Jev
-  // response wins (rebuild is a pure function of the cache and the current
-  // taxonomy/status logic), else the prior committed item survives verbatim
+  // that is not an override: refresh forces the API; otherwise a cache hit
+  // wins (rebuild is a pure function of the cache and the current
+  // taxonomy/status logic); a stale cache entry (its response names a node
+  // the taxonomy no longer has) always goes to toClassify, even when a prior
+  // record exists, because that prior was derived from the same stale
+  // response; on a cache miss, the prior committed item survives verbatim
   // (unless its status is "error", which is not a usable prior: it means the
   // previous run's API call failed and nothing was learned about the item, so
   // it falls through to toClassify like a never-seen item), else the API is
   // called.
   const toOverride: PreprocessedItem[] = [];
   const toRebuild: { item: PreprocessedItem; cached: CachedResponse }[] = [];
+  const toStale: { item: PreprocessedItem; unknownIds: string[] }[] = [];
   const toKeep: ClassificationItem[] = [];
   const toClassify: PreprocessedItem[] = [];
   for (const item of selected) {
@@ -222,9 +226,14 @@ async function main(): Promise<void> {
       continue;
     }
     if (!args.refresh) {
-      const cached = readJevCache(item.core, taxonomy);
-      if (cached) {
-        toRebuild.push({ item, cached });
+      const cacheRead = readJevCache(item.core, taxonomy);
+      if (cacheRead.status === "hit") {
+        toRebuild.push({ item, cached: cacheRead.response });
+        continue;
+      }
+      if (cacheRead.status === "stale") {
+        toStale.push({ item, unknownIds: cacheRead.unknownIds });
+        toClassify.push(item);
         continue;
       }
       const prior = priorMap.get(item.core);
@@ -236,10 +245,17 @@ async function main(): Promise<void> {
     toClassify.push(item);
   }
 
+  if (toStale.length > 0) {
+    const unknownIds = [...new Set(toStale.flatMap((stale) => stale.unknownIds))];
+    const shown = unknownIds.slice(0, 10).join(", ");
+    console.error(`Cached responses name removed nodes: ${shown}${unknownIds.length > 10 ? ", ..." : ""}`);
+  }
+
   if (args.dryRun) {
     console.log(`Items considered (unresolved, count >= ${args.minCount}): ${selected.length}`);
     console.log(`  Would apply overrides: ${toOverride.length}`);
     console.log(`  Would rederive from cache (no API calls): ${toRebuild.length}`);
+    console.log(`  Would re-ask, cached response names removed nodes: ${toStale.length}`);
     console.log(`  Would keep prior output, no cache: ${toKeep.length}`);
     console.log(`  Would classify via Jev: ${toClassify.length}`);
     console.log(`Estimated requests: up to ${toClassify.length * 2} (2 per item; fewer when root resolves to "none")`);
@@ -287,12 +303,16 @@ async function main(): Promise<void> {
 
   // Merge: prior items (version-matched) survive unless this run replaced
   // them, but a prior record is dropped rather than carried forward when its
-  // core no longer appears in the preprocessed file or now resolves through
-  // a taxonomy alias (a tree edit made the classifier record obsolete).
+  // core no longer appears in the preprocessed file, now resolves through a
+  // taxonomy alias, or names a node the taxonomy no longer has (a tree edit
+  // made the classifier record obsolete in each case).
   const finalMap = new Map<string, ClassificationItem>();
   for (const [core, item] of priorMap) {
     if (!preprocessedByCore.has(core)) continue;
     if (taxonomy.resolveAlias(core) !== undefined) continue;
+    // "none" is the classifier's sentinel for "did not place it", never a
+    // real taxonomy id (see jev.ts), so it never counts as a removed node.
+    if ("node" in item && typeof item.node === "string" && item.node !== "none" && !taxonomy.nodes.has(item.node)) continue;
     finalMap.set(core, item);
   }
   for (const item of freshlyBuilt) finalMap.set(item.core, item);
@@ -329,6 +349,7 @@ async function main(): Promise<void> {
     selected: selected.length,
     overrides: toOverride.length,
     rebuilt: toRebuild.length,
+    stale: toStale.length,
     kept: toKeep.length,
     apiCalls,
     inputTokens,
@@ -342,6 +363,7 @@ interface RunStats {
   selected: number;
   overrides: number;
   rebuilt: number;
+  stale: number;
   kept: number;
   apiCalls: number;
   inputTokens: number;
@@ -357,6 +379,7 @@ function printReport(output: ClassificationsFile, stats: RunStats): void {
   console.log(`Items considered: ${stats.selected}`);
   console.log(`  Overrides applied: ${stats.overrides}`);
   console.log(`  Rederived from cache: ${stats.rebuilt}`);
+  console.log(`  Stale (cached response named removed nodes, re-asked): ${stats.stale}`);
   console.log(`  Kept from prior, no cache: ${stats.kept}`);
   console.log(`  API calls made: ${stats.apiCalls}`);
   if (stats.apiCalls > 0) {

@@ -105,23 +105,64 @@ export interface CachedResponse {
   request2: SystemOneResult<NodeQuestions> | null;
 }
 
-/** A cache key stable across reruns, tied to the taxonomy (version and
- * structure) and prompt version. The structure hash invalidates the cache
- * when nodes, parents, or categories change; it deliberately ignores names
- * and aliases, so an alias edit does not invalidate the cache. */
+/** A cache key stable across reruns, tied to the taxonomy version and
+ * prompt version. It deliberately ignores tree shape: adding or removing a
+ * node no longer invalidates the whole cache. A cached response that names
+ * a node the current tree lacks is instead caught on read, by
+ * `unknownIdsIn`. */
 function cacheKeyFor(core: string, taxonomy: Taxonomy): string {
-  return crypto.createHash("sha1").update(`${core}|${taxonomy.version}|${PROMPT_VERSION}|${taxonomy.structureHash}`).digest("hex");
+  return crypto.createHash("sha1").update(`${core}|${taxonomy.version}|${PROMPT_VERSION}`).digest("hex");
 }
 
 function cachePathFor(core: string, taxonomy: Taxonomy): string {
   return path.join(JEV_CACHE_DIR, `${cacheKeyFor(core, taxonomy)}.json`);
 }
 
-/** The cached Jev response for `core`, or null when nothing is cached. */
-export function readJevCache(core: string, taxonomy: Taxonomy): CachedResponse | null {
+/**
+ * Node ids a cached response refers to that the taxonomy no longer has.
+ * Empty means the response is usable. Checks the root answer's
+ * probabilities and choice, and, when present, the node answer's
+ * probabilities and choice. A new node the cached response simply did not
+ * have as an option is NOT stale: that additive drift is accepted, which is
+ * the whole point of dropping the structure hash from the cache key. "none"
+ * is a sentinel, never a real node id, so it is never reported.
+ */
+export function unknownIdsIn(response: CachedResponse, taxonomy: Taxonomy): string[] {
+  const unknown = new Set<string>();
+
+  function check(id: string): void {
+    if (id !== NONE && !taxonomy.nodes.has(id)) unknown.add(id);
+  }
+
+  const rootAnswer = response.request1.answers.root;
+  for (const id of Object.keys(rootAnswer.probabilities)) check(id);
+  check(rootAnswer.choice);
+
+  if (response.request2) {
+    const nodeAnswer = response.request2.answers.node;
+    for (const id of Object.keys(nodeAnswer.probabilities)) check(id);
+    check(nodeAnswer.choice);
+  }
+
+  return [...unknown];
+}
+
+export type CacheRead =
+  | { status: "hit"; response: CachedResponse }
+  | { status: "stale"; unknownIds: string[] }
+  | { status: "miss" };
+
+/** Reads the cached Jev response for `core`, validating it against the
+ * current taxonomy. "stale" means the response names node ids the taxonomy
+ * no longer has (see `unknownIdsIn`); the caller should re-ask rather than
+ * rebuild from it. */
+export function readJevCache(core: string, taxonomy: Taxonomy): CacheRead {
   const cachePath = cachePathFor(core, taxonomy);
-  if (!fs.existsSync(cachePath)) return null;
-  return JSON.parse(fs.readFileSync(cachePath, "utf8")) as CachedResponse;
+  if (!fs.existsSync(cachePath)) return { status: "miss" };
+  const response = JSON.parse(fs.readFileSync(cachePath, "utf8")) as CachedResponse;
+  const unknownIds = unknownIdsIn(response, taxonomy);
+  if (unknownIds.length > 0) return { status: "stale", unknownIds };
+  return { status: "hit", response };
 }
 
 export function writeJevCache(core: string, taxonomy: Taxonomy, response: CachedResponse): void {

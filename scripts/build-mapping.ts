@@ -39,7 +39,10 @@ async function main(): Promise<void> {
   const taxonomy = loadTaxonomy();
   const overrides = readOverrides();
   const classificationsFile = readClassifications();
-  const classifications = classificationLookup(classificationsFile?.items ?? []);
+  const { lookup: classifications, skipped: skippedClassifications } = classificationLookup(
+    classificationsFile?.items ?? [],
+    (id) => taxonomy.nodes.has(id),
+  );
 
   const deps: ResolveDeps = {
     overrides,
@@ -181,6 +184,10 @@ async function main(): Promise<void> {
   const recipesWithOneUnresolved = recipes.filter((r) => r.unresolved?.length === 1).length;
   const recipesWithTwoPlusUnresolved = recipes.filter((r) => (r.unresolved?.length ?? 0) >= 2).length;
 
+  if (skippedClassifications.length > 0) {
+    console.log(`Ignored ${skippedClassifications.length} classifications naming removed nodes`);
+    console.log("");
+  }
   console.log(`Recipes read:              ${recipesRead}`);
   console.log(`Recipes skipped (no lines): ${recipesSkippedNoLines}`);
   console.log(`Recipes in output:         ${recipes.length}`);

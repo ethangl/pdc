@@ -6,11 +6,13 @@ import assert from "node:assert/strict";
 import {
   resolveLine,
   dedupeRequirements,
+  classificationLookup,
   type ResolveDeps,
   type LineResolution,
   type Requirement,
 } from "./lib/mapping.js";
 import type { PreprocessedIngredient } from "./lib/preprocess.js";
+import type { ClassificationItem } from "./lib/data-files.js";
 
 // --- a small in-memory taxonomy stand-in ---
 
@@ -212,4 +214,17 @@ test("dedupe ANDs substitute across merged duplicates", () => {
   const result = dedupeRequirements(input);
   const expected = [{ nodes: ["simple-syrup"], houseMade: false, raw: "mystery syrup" }];
   assert.deepEqual(result, expected);
+});
+
+// --- classificationLookup: skips a classification naming a removed node ---
+
+test("classificationLookup skips an accepted item whose node the taxonomy lacks", () => {
+  const items: ClassificationItem[] = [
+    { core: "fancy gin", count: 5, status: "accepted", root: "gin", rootConfidence: 0.95, rootTop3: {}, node: "gin", nodeConfidence: 0.95, nodeTop3: {}, nodeProbabilities: {}, rawNodeChoice: "gin", collapsed: false, isBrand: 0, isHousePrep: 0, isGarnish: 0 },
+    { core: "old kummel", count: 2, status: "accepted", root: "liqueur", rootConfidence: 0.95, rootTop3: {}, node: "kummel", nodeConfidence: 0.95, nodeTop3: {}, nodeProbabilities: {}, rawNodeChoice: "kummel", collapsed: false, isBrand: 0, isHousePrep: 0, isGarnish: 0 },
+  ];
+  const hasNode = (id: string) => id !== "kummel"; // the taxonomy dropped "kummel"
+  const { lookup, skipped } = classificationLookup(items, hasNode);
+  assert.deepEqual([...lookup.keys()], ["fancy gin"]);
+  assert.deepEqual(skipped, ["old kummel"]);
 });

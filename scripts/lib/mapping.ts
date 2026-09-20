@@ -52,16 +52,27 @@ export interface ResolveDeps {
  * resolve as "classification", fallback classifications as "fallback".
  * Items with status "override" are skipped here: resolveCandidate checks
  * curated/overrides.json itself first, so an override classification record
- * is never consulted through this lookup. */
-export function classificationLookup(items: ClassificationItem[]): ResolveDeps["classifications"] {
+ * is never consulted through this lookup. An accepted or fallback item whose
+ * node fails `hasNode` names a node a later tree edit removed; it is skipped
+ * and its core reported in `skipped`, rather than resolving to a node the
+ * taxonomy no longer has. */
+export function classificationLookup(
+  items: ClassificationItem[],
+  hasNode: (id: string) => boolean,
+): { lookup: ResolveDeps["classifications"]; skipped: string[] } {
   const lookup: ResolveDeps["classifications"] = new Map();
+  const skipped: string[] = [];
   for (const item of items) {
     if (item.status === "accepted" || item.status === "fallback") {
       if (item.node === null) continue; // invariant: always a string node for these statuses
+      if (!hasNode(item.node)) {
+        skipped.push(item.core);
+        continue;
+      }
       lookup.set(item.core, { nodeId: item.node, source: item.status === "fallback" ? "fallback" : "classification" });
     }
   }
-  return lookup;
+  return { lookup, skipped };
 }
 
 export type LineBucket = "requires" | "optional" | "unresolved" | "dropped";
