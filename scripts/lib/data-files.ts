@@ -3,6 +3,7 @@
 // files live in curated/, generated files in data/.
 
 import * as fs from "node:fs";
+import type { Taxonomy } from "./taxonomy.js";
 import {
   INGREDIENTS_PREPROCESSED_PATH,
   CLASSIFICATIONS_PATH,
@@ -81,6 +82,8 @@ export interface JevClassification extends ClassificationBase {
   root: string;
   rootConfidence: number;
   rootTop3: Record<string, number>;
+  /** Null when the node question was skipped (root none) or answered none;
+   * `rawNodeChoice` tells which. */
   node: string | null;
   nodeConfidence: number | null;
   nodeTop3: Record<string, number> | null;
@@ -106,16 +109,63 @@ export interface ClassificationsFile {
   items: ClassificationItem[];
 }
 
-export function readClassifications(): ClassificationsFile | null {
-  if (!fs.existsSync(CLASSIFICATIONS_PATH)) return null;
-  return JSON.parse(fs.readFileSync(CLASSIFICATIONS_PATH, "utf8"));
+/** Removes records whose `node` names a taxonomy node id the tree no longer
+ * has. Applies to every status: an override record can name a removed node
+ * too. Pure, so it is tested directly rather than through a file on disk. */
+export function dropRemovedNodes(
+  items: ClassificationItem[],
+  taxonomy: Taxonomy,
+): { items: ClassificationItem[]; droppedCores: string[] } {
+  const kept: ClassificationItem[] = [];
+  const droppedCores: string[] = [];
+  for (const item of items) {
+    if ("node" in item && item.node !== null && !taxonomy.nodes.has(item.node)) {
+      droppedCores.push(item.core);
+      continue;
+    }
+    kept.push(item);
+  }
+  return { items: kept, droppedCores };
+}
+
+/** Reads the committed classifications file, dropping any record that names
+ * a node the current taxonomy no longer has (see `dropRemovedNodes`). This
+ * is the one place that check runs; callers get an already-clean file. */
+export function readClassifications(taxonomy: Taxonomy): { file: ClassificationsFile | null; droppedCores: string[] } {
+  if (!fs.existsSync(CLASSIFICATIONS_PATH)) return { file: null, droppedCores: [] };
+  const raw = JSON.parse(fs.readFileSync(CLASSIFICATIONS_PATH, "utf8")) as ClassificationsFile;
+  const { items, droppedCores } = dropRemovedNodes(raw.items, taxonomy);
+  return { file: { ...raw, items }, droppedCores };
 }
 
 // --- curated/overrides.json ---
 
 export type Overrides = Record<string, string | null>;
 
-export function readOverrides(): Overrides {
+/** Overrides whose non-null value names a node the taxonomy lacks, or names
+ * a category node (an override must resolve to a concrete ingredient, not a
+ * generic bucket). Returns each bad entry as "core -> node". */
+export function invalidOverrides(overrides: Overrides, taxonomy: Taxonomy): string[] {
+  const problems: string[] = [];
+  for (const [core, node] of Object.entries(overrides)) {
+    if (node === null) continue;
+    const target = taxonomy.nodes.get(node);
+    if (!target || taxonomy.isCategory(node)) {
+      problems.push(`${core} -> ${node}`);
+    }
+  }
+  return problems;
+}
+
+/** Reads curated/overrides.json. This file is hand-edited, so a target that
+ * does not name an existing non-category node is not silently dropped: it
+ * fails loudly. */
+export function readOverrides(taxonomy: Taxonomy): Overrides {
   if (!fs.existsSync(OVERRIDES_PATH)) return {};
-  return JSON.parse(fs.readFileSync(OVERRIDES_PATH, "utf8"));
+  const overrides = JSON.parse(fs.readFileSync(OVERRIDES_PATH, "utf8")) as Overrides;
+  const problems = invalidOverrides(overrides, taxonomy);
+  if (problems.length > 0) {
+    throw new Error(`curated/overrides.json has ${problems.length} invalid entr${problems.length === 1 ? "y" : "ies"}:\n${problems.join("\n")}`);
+  }
+  return overrides;
 }

@@ -3,8 +3,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { unknownIdsIn, type CachedResponse } from "./lib/jev.js";
+import { unknownIdsIn, decide, type CachedResponse } from "./lib/jev.js";
 import { taxonomyFromRaw } from "./lib/taxonomy.js";
+import type { ClassificationItem } from "./lib/data-files.js";
 
 // --- a tiny stand-in taxonomy: two roots, one with a child ---
 
@@ -84,4 +85,62 @@ test('"none" is never reported', () => {
     nodeProbabilities: { "london-dry-gin": 0.1, none: 0.9 },
   });
   assert.deepEqual(unknownIdsIn(cached, taxonomy), []);
+});
+
+// --- decide ---
+
+const priorAccepted = { core: "fancy gin", count: 5, status: "accepted" } as unknown as ClassificationItem;
+const priorError = { core: "fancy gin", count: 5, status: "error" } as unknown as ClassificationItem;
+
+function failingReadCache(): never {
+  throw new Error("readCache should not be called");
+}
+
+test("an override never reaches the API", () => {
+  const decision = decide({ overridden: true, refresh: true, readCache: failingReadCache, prior: priorAccepted });
+  assert.deepEqual(decision, { kind: "override" });
+});
+
+test("--refresh always asks, without reading the cache", () => {
+  const decision = decide({ overridden: false, refresh: true, readCache: failingReadCache, prior: priorAccepted });
+  assert.deepEqual(decision, { kind: "ask", reason: "refresh", unknownIds: [] });
+});
+
+test("a cache hit rebuilds", () => {
+  const cached = response({ rootChoice: "vodka", rootProbabilities: { gin: 0.1, vodka: 0.9 } });
+  const decision = decide({
+    overridden: false,
+    refresh: false,
+    readCache: () => ({ status: "hit", response: cached }),
+    prior: undefined,
+  });
+  assert.deepEqual(decision, { kind: "rebuild", cached });
+});
+
+test("a stale cache entry asks even when a prior exists", () => {
+  const decision = decide({
+    overridden: false,
+    refresh: false,
+    readCache: () => ({ status: "stale", unknownIds: ["kummel"] }),
+    prior: priorAccepted,
+  });
+  assert.deepEqual(decision, { kind: "ask", reason: "stale", unknownIds: ["kummel"] });
+});
+
+test("a cache miss keeps a non-error prior", () => {
+  const decision = decide({
+    overridden: false,
+    refresh: false,
+    readCache: () => ({ status: "miss" }),
+    prior: priorAccepted,
+  });
+  assert.deepEqual(decision, { kind: "keep", prior: priorAccepted });
+});
+
+test("a cache miss with no usable prior asks (no prior, or an error prior)", () => {
+  const noPrior = decide({ overridden: false, refresh: false, readCache: () => ({ status: "miss" }), prior: undefined });
+  assert.deepEqual(noPrior, { kind: "ask", reason: "miss", unknownIds: [] });
+
+  const errorPrior = decide({ overridden: false, refresh: false, readCache: () => ({ status: "miss" }), prior: priorError });
+  assert.deepEqual(errorPrior, { kind: "ask", reason: "miss", unknownIds: [] });
 });

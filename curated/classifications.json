@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-20T17:39:49.427Z",
+  "generatedAt": "2026-09-20T18:10:43.212Z",
   "taxonomyVersion": 1,
   "promptVersion": "2",
   "model": "jev-latest",
@@ -120347,7 +120347,7 @@
         "produce": 0.2,
         "none": 0.18
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.77,
       "nodeTop3": {
         "none": 0.77,
@@ -120423,7 +120423,7 @@
         "beer-cider": 0.36,
         "none": 0.05
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.65,
       "nodeTop3": {
         "none": 0.65,
@@ -120478,7 +120478,7 @@
         "brandy": 0.15000000000000002,
         "aromatized-wine": 0.14
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.62,
       "nodeTop3": {
         "none": 0.62,
@@ -120571,7 +120571,7 @@
         "none": 0.13,
         "wine": 0.09
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.46,
       "nodeTop3": {
         "none": 0.46,
@@ -120610,7 +120610,7 @@
         "liqueur": 0.23,
         "syrup": 0.11
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.29000000000000004,
       "nodeTop3": {
         "none": 0.29000000000000004,
@@ -120658,7 +120658,7 @@
         "pantry": 0,
         "liqueur": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.79,
       "nodeTop3": {
         "none": 0.79,
@@ -120717,7 +120717,7 @@
         "mixer": 0.18,
         "wine": 0.12
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.79,
       "nodeTop3": {
         "none": 0.79,
@@ -120788,7 +120788,7 @@
         "produce": 0.060000000000000005,
         "none": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.67,
       "nodeTop3": {
         "none": 0.67,
@@ -120881,7 +120881,7 @@
         "mixer": 0.12,
         "beer-cider": 0.07
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.93,
       "nodeTop3": {
         "none": 0.93,
@@ -120938,7 +120938,7 @@
         "other-spirit": 0.04,
         "produce": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.58,
       "nodeTop3": {
         "none": 0.58,
@@ -120989,7 +120989,7 @@
         "syrup": 0.32,
         "bitters": 0.28
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.52,
       "nodeTop3": {
         "none": 0.52,
@@ -121084,7 +121084,7 @@
         "pantry": 0.01,
         "whiskey": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.91,
       "nodeTop3": {
         "none": 0.91,
@@ -121176,7 +121176,7 @@
         "none": 0.04,
         "anise-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.61,
       "nodeTop3": {
         "none": 0.61,
@@ -121231,7 +121231,7 @@
         "none": 0.32,
         "bitters": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.93,
       "nodeTop3": {
         "none": 0.93,
@@ -121302,7 +121302,7 @@
         "mixer": 0.05,
         "none": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.98,
       "nodeTop3": {
         "none": 0.98,
@@ -121373,7 +121373,7 @@
         "anise-spirit": 0,
         "whiskey": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.63,
       "nodeTop3": {
         "none": 0.63,
@@ -121491,7 +121491,7 @@
         "none": 0.21000000000000002,
         "pantry": 0.21000000000000002
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.8,
       "nodeTop3": {
         "none": 0.8,
@@ -121542,7 +121542,7 @@
         "pantry": 0.23,
         "none": 0.17
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -121597,7 +121597,7 @@
         "beer-cider": 0.19,
         "other-spirit": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.48,
       "nodeTop3": {
         "none": 0.48,
@@ -121652,7 +121652,7 @@
         "syrup": 0.18,
         "none": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.72,
       "nodeTop3": {
         "none": 0.72,
@@ -121747,7 +121747,7 @@
         "none": 0.25,
         "wine": 0.11
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.55,
       "nodeTop3": {
         "none": 0.55,
@@ -121802,7 +121802,7 @@
         "produce": 0.38,
         "bitters": 0.09
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.92,
       "nodeTop3": {
         "none": 0.92,
@@ -121873,7 +121873,7 @@
         "none": 0.08,
         "produce": 0.05
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.61,
       "nodeTop3": {
         "none": 0.61,
@@ -121924,7 +121924,7 @@
         "mixer": 0,
         "brandy": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.6900000000000001,
       "nodeTop3": {
         "none": 0.6900000000000001,
@@ -122019,7 +122019,7 @@
         "syrup": 0.13,
         "none": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.53,
       "nodeTop3": {
         "none": 0.53,
@@ -122135,7 +122135,7 @@
         "none": 0.09,
         "pantry": 0.08
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.98,
       "nodeTop3": {
         "none": 0.98,
@@ -122190,7 +122190,7 @@
         "aromatized-wine": 0,
         "vodka": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.8,
       "nodeTop3": {
         "none": 0.8,
@@ -122285,7 +122285,7 @@
         "pantry": 0.02,
         "bitters": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.95,
       "nodeTop3": {
         "none": 0.95,
@@ -122377,7 +122377,7 @@
         "syrup": 0.08,
         "cane-spirit": 0.05
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -122432,7 +122432,7 @@
         "produce": 0.04,
         "anise-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.83,
       "nodeTop3": {
         "none": 0.83,
@@ -122491,7 +122491,7 @@
         "none": 0.01,
         "bitter-liqueur": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.67,
       "nodeTop3": {
         "none": 0.67,
@@ -122562,7 +122562,7 @@
         "syrup": 0.14,
         "none": 0.06
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.4,
       "nodeTop3": {
         "none": 0.4,
@@ -122657,7 +122657,7 @@
         "pantry": 0.29,
         "none": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.99,
       "nodeTop3": {
         "none": 0.99,
@@ -122712,7 +122712,7 @@
         "anise-spirit": 0,
         "dairy": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.88,
       "nodeTop3": {
         "none": 0.88,
@@ -122771,7 +122771,7 @@
         "produce": 0.22,
         "agave-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.93,
       "nodeTop3": {
         "none": 0.93,
@@ -122830,7 +122830,7 @@
         "bitter-liqueur": 0.2,
         "none": 0.14
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.22,
       "nodeTop3": {
         "none": 0.22,
@@ -122925,7 +122925,7 @@
         "none": 0.3,
         "syrup": 0.1
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.99,
       "nodeTop3": {
         "none": 0.99,
@@ -122996,7 +122996,7 @@
         "bitters": 0.19,
         "none": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.4,
       "nodeTop3": {
         "none": 0.4,
@@ -123067,7 +123067,7 @@
         "pantry": 0.37,
         "none": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.48,
       "nodeTop3": {
         "none": 0.48,
@@ -123139,7 +123139,7 @@
         "pantry": 0.25,
         "produce": 0.22
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.89,
       "nodeTop3": {
         "none": 0.89,
@@ -123194,7 +123194,7 @@
         "none": 0.3,
         "mixer": 0.21
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.51,
       "nodeTop3": {
         "none": 0.51,
@@ -123253,7 +123253,7 @@
         "none": 0.26,
         "syrup": 0.12
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.96,
       "nodeTop3": {
         "none": 0.96,
@@ -123308,7 +123308,7 @@
         "liqueur": 0.02,
         "pantry": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.68,
       "nodeTop3": {
         "none": 0.68,
@@ -123359,7 +123359,7 @@
         "produce": 0.06,
         "none": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.47000000000000003,
       "nodeTop3": {
         "none": 0.47000000000000003,
@@ -123418,7 +123418,7 @@
         "juice": 0.13,
         "none": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.49,
       "nodeTop3": {
         "none": 0.49,
@@ -123510,7 +123510,7 @@
         "liqueur": 0,
         "bitters": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.8,
       "nodeTop3": {
         "none": 0.8,
@@ -123602,7 +123602,7 @@
         "produce": 0.26,
         "none": 0.18
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.85,
       "nodeTop3": {
         "none": 0.85,
@@ -123657,7 +123657,7 @@
         "mixer": 0,
         "syrup": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.73,
       "nodeTop3": {
         "none": 0.73,
@@ -123812,7 +123812,7 @@
         "pantry": 0.42,
         "mixer": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.63,
       "nodeTop3": {
         "none": 0.63,
@@ -123904,7 +123904,7 @@
         "beer-cider": 0,
         "liqueur": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.49,
       "nodeTop3": {
         "none": 0.49,
@@ -123959,7 +123959,7 @@
         "produce": 0.06,
         "wine": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.92,
       "nodeTop3": {
         "none": 0.92,
@@ -124018,7 +124018,7 @@
         "liqueur": 0.24,
         "syrup": 0.09
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -124073,7 +124073,7 @@
         "mixer": 0.32,
         "pantry": 0.05
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.58,
       "nodeTop3": {
         "none": 0.58,
@@ -124165,7 +124165,7 @@
         "produce": 0.04,
         "liqueur": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.54,
       "nodeTop3": {
         "none": 0.54,
@@ -124236,7 +124236,7 @@
         "none": 0.14,
         "dairy": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.47000000000000003,
       "nodeTop3": {
         "none": 0.47000000000000003,
@@ -124307,7 +124307,7 @@
         "pantry": 0.16,
         "fortified-wine": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.98,
       "nodeTop3": {
         "none": 0.98,
@@ -124399,7 +124399,7 @@
         "syrup": 0.28,
         "none": 0.05
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.46,
       "nodeTop3": {
         "none": 0.46,
@@ -124494,7 +124494,7 @@
         "bitter-liqueur": 0.08,
         "liqueur": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.54,
       "nodeTop3": {
         "none": 0.54,
@@ -124565,7 +124565,7 @@
         "syrup": 0.2,
         "none": 0.08
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.56,
       "nodeTop3": {
         "none": 0.56,
@@ -124660,7 +124660,7 @@
         "none": 0.36,
         "mixer": 0.04
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.9,
       "nodeTop3": {
         "none": 0.9,
@@ -124731,7 +124731,7 @@
         "none": 0.03,
         "bitter-liqueur": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.36,
       "nodeTop3": {
         "none": 0.36,
@@ -124826,7 +124826,7 @@
         "pantry": 0.2,
         "produce": 0.09
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -124902,7 +124902,7 @@
         "mixer": 0.22,
         "none": 0.12
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -124973,7 +124973,7 @@
         "produce": 0.23,
         "aromatized-wine": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.97,
       "nodeTop3": {
         "none": 0.97,
@@ -125032,7 +125032,7 @@
         "produce": 0.33,
         "bitters": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.97,
       "nodeTop3": {
         "none": 0.97,
@@ -125103,7 +125103,7 @@
         "pantry": 0.05,
         "aromatized-wine": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.75,
       "nodeTop3": {
         "none": 0.75,
@@ -125195,7 +125195,7 @@
         "pantry": 0.18,
         "none": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -125308,7 +125308,7 @@
         "mixer": 0.25,
         "none": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -125379,7 +125379,7 @@
         "none": 0.13,
         "fortified-wine": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.32,
       "nodeTop3": {
         "none": 0.32,
@@ -125474,7 +125474,7 @@
         "none": 0.25,
         "syrup": 0.07
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.9400000000000001,
       "nodeTop3": {
         "none": 0.9400000000000001,
@@ -125571,7 +125571,7 @@
         "brandy": 0.25,
         "none": 0.21
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.64,
       "nodeTop3": {
         "none": 0.64,
@@ -125666,7 +125666,7 @@
         "brandy": 0.21000000000000002,
         "none": 0.15000000000000002
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.58,
       "nodeTop3": {
         "none": 0.58,
@@ -125761,7 +125761,7 @@
         "pantry": 0.3,
         "none": 0.06
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.9,
       "nodeTop3": {
         "none": 0.9,
@@ -125812,7 +125812,7 @@
         "syrup": 0.25,
         "none": 0.11
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.44,
       "nodeTop3": {
         "none": 0.44,
@@ -125867,7 +125867,7 @@
         "pantry": 0.06,
         "anise-spirit": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.9,
       "nodeTop3": {
         "none": 0.9,
@@ -125959,7 +125959,7 @@
         "bitter-liqueur": 0,
         "mixer": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.74,
       "nodeTop3": {
         "none": 0.74,
@@ -126072,7 +126072,7 @@
         "produce": 0.3,
         "none": 0.15000000000000002
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.79,
       "nodeTop3": {
         "none": 0.79,
@@ -126127,7 +126127,7 @@
         "produce": 0.25,
         "pantry": 0.04
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.9,
       "nodeTop3": {
         "none": 0.9,
@@ -126198,7 +126198,7 @@
         "aromatized-wine": 0.14,
         "none": 0.11
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.9,
       "nodeTop3": {
         "none": 0.9,
@@ -126263,7 +126263,7 @@
         "aromatized-wine": 0.01,
         "syrup": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.53,
       "nodeTop3": {
         "none": 0.53,
@@ -126307,7 +126307,7 @@
         "syrup": 0.26,
         "none": 0.09
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.46,
       "nodeTop3": {
         "none": 0.46,
@@ -126402,7 +126402,7 @@
         "none": 0.16,
         "mixer": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.94,
       "nodeTop3": {
         "none": 0.94,
@@ -126473,7 +126473,7 @@
         "none": 0.36,
         "syrup": 0.07
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -126532,7 +126532,7 @@
         "none": 0.11,
         "pantry": 0.05
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.34,
       "nodeTop3": {
         "none": 0.34,
@@ -126608,7 +126608,7 @@
         "none": 0.24,
         "produce": 0.11
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.85,
       "nodeTop3": {
         "none": 0.85,
@@ -126663,7 +126663,7 @@
         "pantry": 0.07,
         "none": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.97,
       "nodeTop3": {
         "none": 0.97,
@@ -126705,7 +126705,7 @@
         "produce": 0.35,
         "none": 0.17
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.91,
       "nodeTop3": {
         "none": 0.91,
@@ -126760,7 +126760,7 @@
         "produce": 0.13,
         "cane-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.9,
       "nodeTop3": {
         "none": 0.9,
@@ -126819,7 +126819,7 @@
         "produce": 0.27,
         "pantry": 0.2
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.99,
       "nodeTop3": {
         "none": 0.99,
@@ -126874,7 +126874,7 @@
         "none": 0.45,
         "mixer": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -126945,7 +126945,7 @@
         "mixer": 0.08,
         "bitters": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.99,
       "nodeTop3": {
         "none": 0.99,
@@ -127016,7 +127016,7 @@
         "produce": 0.15,
         "fortified-wine": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.87,
       "nodeTop3": {
         "none": 0.87,
@@ -127075,7 +127075,7 @@
         "mixer": 0.41,
         "bitter-liqueur": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -127134,7 +127134,7 @@
         "liqueur": 0.07,
         "none": 0.04
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.26,
       "nodeTop3": {
         "none": 0.26,
@@ -127205,7 +127205,7 @@
         "none": 0.44,
         "cane-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.53,
       "nodeTop3": {
         "none": 0.53,
@@ -127256,7 +127256,7 @@
         "none": 0.08,
         "produce": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.87,
       "nodeTop3": {
         "none": 0.87,
@@ -127327,7 +127327,7 @@
         "none": 0.08,
         "other-spirit": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.58,
       "nodeTop3": {
         "none": 0.58,
@@ -127378,7 +127378,7 @@
         "produce": 0.01,
         "bitter-liqueur": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.75,
       "nodeTop3": {
         "none": 0.75,
@@ -127437,7 +127437,7 @@
         "syrup": 0.07,
         "dairy": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.95,
       "nodeTop3": {
         "none": 0.95,
@@ -127492,7 +127492,7 @@
         "syrup": 0,
         "mixer": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.92,
       "nodeTop3": {
         "none": 0.92,
@@ -127626,7 +127626,7 @@
         "none": 0.47000000000000003,
         "wine": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.68,
       "nodeTop3": {
         "none": 0.68,
@@ -127698,7 +127698,7 @@
         "produce": 0.15,
         "pantry": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -127757,7 +127757,7 @@
         "vodka": 0,
         "dairy": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.74,
       "nodeTop3": {
         "none": 0.74,
@@ -127812,7 +127812,7 @@
         "other-spirit": 0.29000000000000004,
         "none": 0.19
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.75,
       "nodeTop3": {
         "none": 0.75,
@@ -127844,7 +127844,7 @@
         "produce": 0.06,
         "liqueur": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.93,
       "nodeTop3": {
         "none": 0.93,
@@ -127903,7 +127903,7 @@
         "agave-spirit": 0.39,
         "none": 0.05
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.92,
       "nodeTop3": {
         "none": 0.92,
@@ -127939,7 +127939,7 @@
         "liqueur": 0.08,
         "none": 0.04
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.75,
       "nodeTop3": {
         "none": 0.75,
@@ -128011,7 +128011,7 @@
         "produce": 0.04,
         "anise-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.9400000000000001,
       "nodeTop3": {
         "none": 0.9400000000000001,
@@ -128070,7 +128070,7 @@
         "produce": 0.27,
         "pantry": 0.23
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.63,
       "nodeTop3": {
         "none": 0.63,
@@ -128121,7 +128121,7 @@
         "syrup": 0.19,
         "none": 0.11
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.51,
       "nodeTop3": {
         "none": 0.51,
@@ -128237,7 +128237,7 @@
         "beer-cider": 0.4,
         "vodka": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.62,
       "nodeTop3": {
         "none": 0.62,
@@ -128292,7 +128292,7 @@
         "cane-spirit": 0.25,
         "brandy": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.44,
       "nodeTop3": {
         "none": 0.44,
@@ -128328,7 +128328,7 @@
         "whiskey": 0,
         "bitter-liqueur": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.89,
       "nodeTop3": {
         "none": 0.89,
@@ -128423,7 +128423,7 @@
         "none": 0.31,
         "bitters": 0.24
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.95,
       "nodeTop3": {
         "none": 0.95,
@@ -128515,7 +128515,7 @@
         "bitters": 0.06,
         "none": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.9,
       "nodeTop3": {
         "none": 0.9,
@@ -128607,7 +128607,7 @@
         "pantry": 0.01,
         "none": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.93,
       "nodeTop3": {
         "none": 0.93,
@@ -128699,7 +128699,7 @@
         "juice": 0,
         "anise-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.68,
       "nodeTop3": {
         "none": 0.68,
@@ -128791,7 +128791,7 @@
         "dairy": 0,
         "aromatized-wine": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.78,
       "nodeTop3": {
         "none": 0.78,
@@ -128904,7 +128904,7 @@
         "pantry": 0.01,
         "liqueur": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.85,
       "nodeTop3": {
         "none": 0.85,
@@ -129017,7 +129017,7 @@
         "syrup": 0.36,
         "none": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.49,
       "nodeTop3": {
         "none": 0.49,
@@ -129133,7 +129133,7 @@
         "syrup": 0.09,
         "cane-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.5700000000000001,
       "nodeTop3": {
         "none": 0.5700000000000001,
@@ -129228,7 +129228,7 @@
         "produce": 0.27,
         "anise-spirit": 0.19
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.85,
       "nodeTop3": {
         "none": 0.85,
@@ -129299,7 +129299,7 @@
         "mixer": 0.2,
         "anise-spirit": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.69,
       "nodeTop3": {
         "none": 0.69,
@@ -129412,7 +129412,7 @@
         "none": 0.04,
         "pantry": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.84,
       "nodeTop3": {
         "none": 0.84,
@@ -129504,7 +129504,7 @@
         "mixer": 0.28,
         "produce": 0.06
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -129575,7 +129575,7 @@
         "mixer": 0.24,
         "produce": 0.1
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -129688,7 +129688,7 @@
         "syrup": 0.04,
         "mixer": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.93,
       "nodeTop3": {
         "none": 0.93,
@@ -129759,7 +129759,7 @@
         "juice": 0.49,
         "whiskey": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.85,
       "nodeTop3": {
         "none": 0.85,
@@ -129872,7 +129872,7 @@
         "syrup": 0.12,
         "vodka": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.86,
       "nodeTop3": {
         "none": 0.86,
@@ -129967,7 +129967,7 @@
         "dairy": 0.18,
         "juice": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.99,
       "nodeTop3": {
         "none": 0.99,
@@ -130022,7 +130022,7 @@
         "liqueur": 0,
         "brandy": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.88,
       "nodeTop3": {
         "none": 0.88,
@@ -130114,7 +130114,7 @@
         "syrup": 0.19,
         "whiskey": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.63,
       "nodeTop3": {
         "none": 0.63,
@@ -130209,7 +130209,7 @@
         "aromatized-wine": 0.38,
         "wine": 0.06
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.49,
       "nodeTop3": {
         "none": 0.49,
@@ -130253,7 +130253,7 @@
         "produce": 0.18,
         "mixer": 0.15
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.8200000000000001,
       "nodeTop3": {
         "none": 0.8200000000000001,
@@ -130324,7 +130324,7 @@
         "pantry": 0.21,
         "none": 0.08
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.7,
       "nodeTop3": {
         "none": 0.7,
@@ -130387,7 +130387,7 @@
         "aromatized-wine": 0.19,
         "liqueur": 0.16
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.44,
       "nodeTop3": {
         "none": 0.44,
@@ -130438,7 +130438,7 @@
         "produce": 0,
         "whiskey": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.92,
       "nodeTop3": {
         "none": 0.92,
@@ -130514,7 +130514,7 @@
         "none": 0.13,
         "vodka": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.68,
       "nodeTop3": {
         "none": 0.68,
@@ -130607,7 +130607,7 @@
         "none": 0.16,
         "mixer": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.68,
       "nodeTop3": {
         "none": 0.68,
@@ -130679,7 +130679,7 @@
         "none": 0.18,
         "fortified-wine": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.87,
       "nodeTop3": {
         "none": 0.87,
@@ -130750,7 +130750,7 @@
         "beer-cider": 0.43,
         "juice": 0.1
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.98,
       "nodeTop3": {
         "none": 0.98,
@@ -130805,7 +130805,7 @@
         "produce": 0.01,
         "dairy": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.79,
       "nodeTop3": {
         "none": 0.79,
@@ -130876,7 +130876,7 @@
         "liqueur": 0.17,
         "bitter-liqueur": 0.14
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.41000000000000003,
       "nodeTop3": {
         "none": 0.41000000000000003,
@@ -130978,7 +130978,7 @@
         "dairy": 0,
         "anise-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.84,
       "nodeTop3": {
         "none": 0.84,
@@ -131070,7 +131070,7 @@
         "mixer": 0.2,
         "pantry": 0.15
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.85,
       "nodeTop3": {
         "none": 0.85,
@@ -131141,7 +131141,7 @@
         "none": 0.07,
         "liqueur": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.66,
       "nodeTop3": {
         "none": 0.66,
@@ -131192,7 +131192,7 @@
         "produce": 0.16,
         "aromatized-wine": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.92,
       "nodeTop3": {
         "none": 0.92,
@@ -131251,7 +131251,7 @@
         "liqueur": 0.35000000000000003,
         "none": 0.18
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.44,
       "nodeTop3": {
         "none": 0.44,
@@ -131322,7 +131322,7 @@
         "juice": 0.2,
         "mixer": 0.16
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.93,
       "nodeTop3": {
         "none": 0.93,
@@ -131358,7 +131358,7 @@
         "fortified-wine": 0,
         "none": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.92,
       "nodeTop3": {
         "none": 0.92,
@@ -131450,7 +131450,7 @@
         "produce": 0.21,
         "pantry": 0.05
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.81,
       "nodeTop3": {
         "none": 0.81,
@@ -131542,7 +131542,7 @@
         "bitters": 0.01,
         "whiskey": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.74,
       "nodeTop3": {
         "none": 0.74,
@@ -131634,7 +131634,7 @@
         "produce": 0.41,
         "none": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.96,
       "nodeTop3": {
         "none": 0.96,
@@ -131726,7 +131726,7 @@
         "syrup": 0.36,
         "none": 0.08
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.79,
       "nodeTop3": {
         "none": 0.79,
@@ -131821,7 +131821,7 @@
         "none": 0.06999999999999999,
         "gin": 0.06
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.78,
       "nodeTop3": {
         "none": 0.78,
@@ -131876,7 +131876,7 @@
         "none": 0.05,
         "syrup": 0.05
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.5,
       "nodeTop3": {
         "none": 0.5,
@@ -131971,7 +131971,7 @@
         "bitters": 0,
         "whiskey": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.65,
       "nodeTop3": {
         "none": 0.65,
@@ -132066,7 +132066,7 @@
         "juice": 0,
         "wine": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.91,
       "nodeTop3": {
         "none": 0.91,
@@ -132161,7 +132161,7 @@
         "syrup": 0.13,
         "dairy": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.66,
       "nodeTop3": {
         "none": 0.66,
@@ -132256,7 +132256,7 @@
         "brandy": 0.06,
         "other-spirit": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.67,
       "nodeTop3": {
         "none": 0.67,
@@ -132351,7 +132351,7 @@
         "syrup": 0.13,
         "pantry": 0.05
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.89,
       "nodeTop3": {
         "none": 0.89,
@@ -132427,7 +132427,7 @@
         "none": 0.28,
         "mixer": 0.19
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.51,
       "nodeTop3": {
         "none": 0.51,
@@ -132469,7 +132469,7 @@
         "produce": 0.02,
         "mixer": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.98,
       "nodeTop3": {
         "none": 0.98,
@@ -132561,7 +132561,7 @@
         "whiskey": 0.24,
         "liqueur": 0.22
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.52,
       "nodeTop3": {
         "none": 0.52,
@@ -132597,7 +132597,7 @@
         "none": 0.03,
         "agave-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.9400000000000001,
       "nodeTop3": {
         "none": 0.9400000000000001,
@@ -132656,7 +132656,7 @@
         "liqueur": 0.11,
         "none": 0.09999999999999999
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.3,
       "nodeTop3": {
         "none": 0.3,
@@ -132748,7 +132748,7 @@
         "other-spirit": 0,
         "whiskey": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.74,
       "nodeTop3": {
         "none": 0.74,
@@ -132843,7 +132843,7 @@
         "dairy": 0,
         "anise-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.84,
       "nodeTop3": {
         "none": 0.84,
@@ -132935,7 +132935,7 @@
         "other-spirit": 0.24,
         "none": 0.22
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.62,
       "nodeTop3": {
         "none": 0.62,
@@ -133009,7 +133009,7 @@
         "syrup": 0.26,
         "none": 0.1
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.91,
       "nodeTop3": {
         "none": 0.91,
@@ -133080,7 +133080,7 @@
         "produce": 0.09,
         "fortified-wine": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.83,
       "nodeTop3": {
         "none": 0.83,
@@ -133139,7 +133139,7 @@
         "produce": 0.24,
         "pantry": 0.1
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.66,
       "nodeTop3": {
         "none": 0.66,
@@ -133210,7 +133210,7 @@
         "produce": 0.04,
         "vodka": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.91,
       "nodeTop3": {
         "none": 0.91,
@@ -133269,7 +133269,7 @@
         "syrup": 0.06,
         "none": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.46,
       "nodeTop3": {
         "none": 0.46,
@@ -133311,7 +133311,7 @@
         "produce": 0.01,
         "wine": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.99,
       "nodeTop3": {
         "none": 0.99,
@@ -133370,7 +133370,7 @@
         "none": 0.1,
         "bitters": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.46,
       "nodeTop3": {
         "none": 0.46,
@@ -133441,7 +133441,7 @@
         "none": 0.02,
         "aromatized-wine": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.76,
       "nodeTop3": {
         "none": 0.76,
@@ -133533,7 +133533,7 @@
         "produce": 0.24000000000000002,
         "none": 0.2
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.92,
       "nodeTop3": {
         "none": 0.92,
@@ -133604,7 +133604,7 @@
         "none": 0.07,
         "vodka": 0.04
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -133717,7 +133717,7 @@
         "pantry": 0,
         "mixer": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.41000000000000003,
       "nodeTop3": {
         "none": 0.41000000000000003,
@@ -133812,7 +133812,7 @@
         "wine": 0,
         "cane-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.66,
       "nodeTop3": {
         "none": 0.66,
@@ -133907,7 +133907,7 @@
         "syrup": 0.35000000000000003,
         "none": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.43,
       "nodeTop3": {
         "none": 0.43,
@@ -134002,7 +134002,7 @@
         "syrup": 0.14,
         "none": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.46,
       "nodeTop3": {
         "none": 0.46,
@@ -134097,7 +134097,7 @@
         "produce": 0.41,
         "none": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.59,
       "nodeTop3": {
         "none": 0.59,
@@ -134168,7 +134168,7 @@
         "none": 0.29000000000000004,
         "liqueur": 0.08
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.71,
       "nodeTop3": {
         "none": 0.71,
@@ -134260,7 +134260,7 @@
         "produce": 0.11,
         "bitters": 0.1
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.96,
       "nodeTop3": {
         "none": 0.96,
@@ -134331,7 +134331,7 @@
         "liqueur": 0.46,
         "none": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.56,
       "nodeTop3": {
         "none": 0.56,
@@ -134402,7 +134402,7 @@
         "fortified-wine": 0.3,
         "other-spirit": 0.11
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.42,
       "nodeTop3": {
         "none": 0.42,
@@ -134443,7 +134443,7 @@
         "produce": 0.01,
         "fortified-wine": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.63,
       "nodeTop3": {
         "none": 0.63,
@@ -134535,7 +134535,7 @@
         "none": 0.3,
         "produce": 0.27
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.97,
       "nodeTop3": {
         "none": 0.97,
@@ -134606,7 +134606,7 @@
         "syrup": 0.27,
         "dairy": 0.17
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -134661,7 +134661,7 @@
         "whiskey": 0,
         "bitter-liqueur": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.98,
       "nodeTop3": {
         "none": 0.98,
@@ -134774,7 +134774,7 @@
         "vodka": 0,
         "pantry": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.56,
       "nodeTop3": {
         "none": 0.56,
@@ -134869,7 +134869,7 @@
         "wine": 0.01,
         "vodka": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.52,
       "nodeTop3": {
         "none": 0.52,
@@ -134961,7 +134961,7 @@
         "brandy": 0,
         "mixer": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.93,
       "nodeTop3": {
         "none": 0.93,
@@ -135020,7 +135020,7 @@
         "syrup": 0.25,
         "juice": 0.05
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.74,
       "nodeTop3": {
         "none": 0.74,
@@ -135075,7 +135075,7 @@
         "none": 0.19,
         "mixer": 0.15
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.59,
       "nodeTop3": {
         "none": 0.59,
@@ -135134,7 +135134,7 @@
         "juice": 0.05,
         "mixer": 0.04
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.45,
       "nodeTop3": {
         "none": 0.45,
@@ -135176,7 +135176,7 @@
         "none": 0.24,
         "other-spirit": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.77,
       "nodeTop3": {
         "none": 0.77,
@@ -135227,7 +135227,7 @@
         "whiskey": 0.39,
         "other-spirit": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.49,
       "nodeTop3": {
         "none": 0.49,
@@ -135406,7 +135406,7 @@
         "pantry": 0.32,
         "none": 0.05
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.97,
       "nodeTop3": {
         "none": 0.97,
@@ -135498,7 +135498,7 @@
         "produce": 0.09,
         "none": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.5,
       "nodeTop3": {
         "none": 0.5,
@@ -135569,7 +135569,7 @@
         "beer-cider": 0.38,
         "juice": 0.17
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.99,
       "nodeTop3": {
         "none": 0.99,
@@ -135624,7 +135624,7 @@
         "pantry": 0.39,
         "bitters": 0.06
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -135679,7 +135679,7 @@
         "mixer": 0.16,
         "none": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -135750,7 +135750,7 @@
         "juice": 0.02,
         "vodka": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -135847,7 +135847,7 @@
         "syrup": 0.23,
         "none": 0.1
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.78,
       "nodeTop3": {
         "none": 0.78,
@@ -135942,7 +135942,7 @@
         "produce": 0.25,
         "none": 0.09
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.77,
       "nodeTop3": {
         "none": 0.77,
@@ -136013,7 +136013,7 @@
         "syrup": 0.14,
         "juice": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.8,
       "nodeTop3": {
         "none": 0.8,
@@ -136068,7 +136068,7 @@
         "none": 0.17,
         "syrup": 0.12
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.72,
       "nodeTop3": {
         "none": 0.72,
@@ -136119,7 +136119,7 @@
         "none": 0.32,
         "dairy": 0.09
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.89,
       "nodeTop3": {
         "none": 0.89,
@@ -136174,7 +136174,7 @@
         "produce": 0.46,
         "none": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.99,
       "nodeTop3": {
         "none": 0.99,
@@ -136245,7 +136245,7 @@
         "pantry": 0.44,
         "produce": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.55,
       "nodeTop3": {
         "none": 0.55,
@@ -136296,7 +136296,7 @@
         "pantry": 0.32,
         "produce": 0.02
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.55,
       "nodeTop3": {
         "none": 0.55,
@@ -136347,7 +136347,7 @@
         "none": 0.4,
         "mixer": 0.05
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.71,
       "nodeTop3": {
         "none": 0.71,
@@ -136439,7 +136439,7 @@
         "juice": 0.24,
         "syrup": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.93,
       "nodeTop3": {
         "none": 0.93,
@@ -136531,7 +136531,7 @@
         "anise-spirit": 0,
         "mixer": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.8200000000000001,
       "nodeTop3": {
         "none": 0.8200000000000001,
@@ -136626,7 +136626,7 @@
         "none": 0.05,
         "other-spirit": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.49,
       "nodeTop3": {
         "none": 0.49,
@@ -136662,7 +136662,7 @@
         "none": 0.32,
         "mixer": 0.29
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.95,
       "nodeTop3": {
         "none": 0.95,
@@ -136733,7 +136733,7 @@
         "none": 0.07,
         "wine": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.27,
       "nodeTop3": {
         "none": 0.27,
@@ -136828,7 +136828,7 @@
         "syrup": 0.02,
         "liqueur": 0.01
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.96,
       "nodeTop3": {
         "none": 0.96,
@@ -136887,7 +136887,7 @@
         "pantry": 0.34,
         "none": 0.1
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.86,
       "nodeTop3": {
         "none": 0.86,
@@ -136938,7 +136938,7 @@
         "pantry": 0.16,
         "none": 0.15
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.83,
       "nodeTop3": {
         "none": 0.83,
@@ -136989,7 +136989,7 @@
         "none": 0.07,
         "other-spirit": 0.04
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.65,
       "nodeTop3": {
         "none": 0.65,
@@ -137040,7 +137040,7 @@
         "pantry": 0.05,
         "bitter-liqueur": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.8200000000000001,
       "nodeTop3": {
         "none": 0.8200000000000001,
@@ -137132,7 +137132,7 @@
         "liqueur": 0.1,
         "bitters": 0.09
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.5700000000000001,
       "nodeTop3": {
         "none": 0.5700000000000001,
@@ -137204,7 +137204,7 @@
         "none": 0.01,
         "brandy": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.93,
       "nodeTop3": {
         "none": 0.93,
@@ -137299,7 +137299,7 @@
         "cane-spirit": 0,
         "other-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.63,
       "nodeTop3": {
         "none": 0.63,
@@ -137375,7 +137375,7 @@
         "produce": 0.02,
         "cane-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.55,
       "nodeTop3": {
         "none": 0.55,
@@ -137434,7 +137434,7 @@
         "none": 0.34,
         "syrup": 0.11
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.55,
       "nodeTop3": {
         "none": 0.55,
@@ -137529,7 +137529,7 @@
         "bitters": 0.17,
         "syrup": 0.06
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.64,
       "nodeTop3": {
         "none": 0.64,
@@ -137600,7 +137600,7 @@
         "anise-spirit": 0,
         "other-spirit": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.78,
       "nodeTop3": {
         "none": 0.78,
@@ -137695,7 +137695,7 @@
         "liqueur": 0.06999999999999999,
         "syrup": 0.05
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.71,
       "nodeTop3": {
         "none": 0.71,
@@ -137771,7 +137771,7 @@
         "produce": 0.12,
         "liqueur": 0.12
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.54,
       "nodeTop3": {
         "none": 0.54,
@@ -137822,7 +137822,7 @@
         "none": 0.16,
         "mixer": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.78,
       "nodeTop3": {
         "none": 0.78,
@@ -137893,7 +137893,7 @@
         "none": 0.05,
         "produce": 0.03
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.77,
       "nodeTop3": {
         "none": 0.77,
@@ -137985,7 +137985,7 @@
         "produce": 0.36,
         "none": 0.16
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.84,
       "nodeTop3": {
         "none": 0.84,
@@ -138040,7 +138040,7 @@
         "liqueur": 0.38,
         "dairy": 0.12
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.8200000000000001,
       "nodeTop3": {
         "none": 0.8200000000000001,
@@ -138111,7 +138111,7 @@
         "wine": 0.41000000000000003,
         "none": 0.08
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 1,
       "nodeTop3": {
         "none": 1,
@@ -138187,7 +138187,7 @@
         "produce": 0.12,
         "dairy": 0
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.9400000000000001,
       "nodeTop3": {
         "none": 0.9400000000000001,
@@ -138246,7 +138246,7 @@
         "bitters": 0.28,
         "pantry": 0.23
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.67,
       "nodeTop3": {
         "none": 0.67,
@@ -138338,7 +138338,7 @@
         "produce": 0.35000000000000003,
         "none": 0.1
       },
-      "node": "none",
+      "node": null,
       "nodeConfidence": 0.45,
       "nodeTop3": {
         "none": 0.45,

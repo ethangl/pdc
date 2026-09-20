@@ -30,6 +30,7 @@ import {
   createJevClient,
   readJevCache,
   writeJevCache,
+  decide,
   type CachedResponse,
 } from "./lib/jev.js";
 import {
@@ -185,8 +186,11 @@ async function main(): Promise<void> {
   const preprocessed = readPreprocessed();
   const preprocessedByCore = new Map(preprocessed.items.map((item) => [item.core, item]));
 
-  const overrides = readOverrides();
-  const existing = readClassifications();
+  const overrides = readOverrides(taxonomy);
+  const { file: existing, droppedCores } = readClassifications(taxonomy);
+  if (droppedCores.length > 0) {
+    console.error(`Dropped ${droppedCores.length} prior records naming removed nodes`);
+  }
   const priorMap = new Map<string, ClassificationItem>();
   if (existing && existing.taxonomyVersion === taxonomy.version && existing.promptVersion === PROMPT_VERSION) {
     for (const item of existing.items) priorMap.set(item.core, item);
@@ -204,64 +208,58 @@ async function main(): Promise<void> {
     });
   }
 
-  // Classify decisions, without calling the API yet. For each selected item
-  // that is not an override: refresh forces the API; otherwise a cache hit
-  // wins (rebuild is a pure function of the cache and the current
-  // taxonomy/status logic); a stale cache entry (its response names a node
-  // the taxonomy no longer has) always goes to toClassify, even when a prior
-  // record exists, because that prior was derived from the same stale
-  // response; on a cache miss, the prior committed item survives verbatim
-  // (unless its status is "error", which is not a usable prior: it means the
-  // previous run's API call failed and nothing was learned about the item, so
-  // it falls through to toClassify like a never-seen item), else the API is
-  // called.
-  const toOverride: PreprocessedItem[] = [];
-  const toRebuild: { item: PreprocessedItem; cached: CachedResponse }[] = [];
-  const toStale: { item: PreprocessedItem; unknownIds: string[] }[] = [];
-  const toKeep: ClassificationItem[] = [];
-  const toClassify: PreprocessedItem[] = [];
+  // Classify decisions, without calling the API yet. One pure `decide` call
+  // per selected item (see jev.ts); the buckets below are a partition by
+  // decision kind, not overlapping lists.
+  const groups: {
+    override: PreprocessedItem[];
+    rebuild: { item: PreprocessedItem; cached: CachedResponse }[];
+    keep: ClassificationItem[];
+    ask: { item: PreprocessedItem; reason: "refresh" | "stale" | "miss"; unknownIds: string[] }[];
+  } = { override: [], rebuild: [], keep: [], ask: [] };
+
   for (const item of selected) {
-    if (Object.prototype.hasOwnProperty.call(overrides, item.core)) {
-      toOverride.push(item);
-      continue;
+    const decision = decide({
+      overridden: Object.prototype.hasOwnProperty.call(overrides, item.core),
+      refresh: args.refresh,
+      readCache: () => readJevCache(item.core, taxonomy),
+      prior: priorMap.get(item.core),
+    });
+    switch (decision.kind) {
+      case "override":
+        groups.override.push(item);
+        break;
+      case "rebuild":
+        groups.rebuild.push({ item, cached: decision.cached });
+        break;
+      case "keep":
+        groups.keep.push(decision.prior);
+        break;
+      case "ask":
+        groups.ask.push({ item, reason: decision.reason, unknownIds: decision.unknownIds });
+        break;
     }
-    if (!args.refresh) {
-      const cacheRead = readJevCache(item.core, taxonomy);
-      if (cacheRead.status === "hit") {
-        toRebuild.push({ item, cached: cacheRead.response });
-        continue;
-      }
-      if (cacheRead.status === "stale") {
-        toStale.push({ item, unknownIds: cacheRead.unknownIds });
-        toClassify.push(item);
-        continue;
-      }
-      const prior = priorMap.get(item.core);
-      if (prior && prior.status !== "error") {
-        toKeep.push(prior);
-        continue;
-      }
-    }
-    toClassify.push(item);
   }
 
-  if (toStale.length > 0) {
-    const unknownIds = [...new Set(toStale.flatMap((stale) => stale.unknownIds))];
+  const staleAsks = groups.ask.filter((ask) => ask.reason === "stale");
+  if (staleAsks.length > 0) {
+    const unknownIds = [...new Set(staleAsks.flatMap((stale) => stale.unknownIds))];
     const shown = unknownIds.slice(0, 10).join(", ");
     console.error(`Cached responses name removed nodes: ${shown}${unknownIds.length > 10 ? ", ..." : ""}`);
   }
 
   if (args.dryRun) {
     console.log(`Items considered (unresolved, count >= ${args.minCount}): ${selected.length}`);
-    console.log(`  Would apply overrides: ${toOverride.length}`);
-    console.log(`  Would rederive from cache (no API calls): ${toRebuild.length}`);
-    console.log(`  Would re-ask, cached response names removed nodes: ${toStale.length}`);
-    console.log(`  Would keep prior output, no cache: ${toKeep.length}`);
-    console.log(`  Would classify via Jev: ${toClassify.length}`);
-    console.log(`Estimated requests: up to ${toClassify.length * 2} (2 per item; fewer when root resolves to "none")`);
+    console.log(`  Would apply overrides: ${groups.override.length}`);
+    console.log(`  Would rederive from cache (no API calls): ${groups.rebuild.length}`);
+    console.log(`  Would re-ask, cached response names removed nodes: ${staleAsks.length}`);
+    console.log(`  Would keep prior output, no cache: ${groups.keep.length}`);
+    console.log(`  Would classify via Jev: ${groups.ask.length}`);
+    console.log(`Estimated requests: up to ${groups.ask.length * 2} (2 per item; fewer when root resolves to "none")`);
     return;
   }
 
+  const toClassify = groups.ask.map((ask) => ask.item);
   const apiKey = process.env.TYPESAFE_API_KEY;
   if (!toClassify.length) {
     console.log("No items need API calls (overrides/cache/prior output cover the selection).");
@@ -278,12 +276,12 @@ async function main(): Promise<void> {
   let outputTokens = 0;
   const freshlyBuilt: ClassificationItem[] = [];
 
-  for (const item of toOverride) {
+  for (const item of groups.override) {
     const nodeId = overrides[item.core];
     freshlyBuilt.push(overrideRecord(item, taxonomy, nodeId));
   }
 
-  for (const { item, cached } of toRebuild) {
+  for (const { item, cached } of groups.rebuild) {
     freshlyBuilt.push(buildRecord(item, cached, taxonomy));
   }
 
@@ -303,20 +301,18 @@ async function main(): Promise<void> {
 
   // Merge: prior items (version-matched) survive unless this run replaced
   // them, but a prior record is dropped rather than carried forward when its
-  // core no longer appears in the preprocessed file, now resolves through a
-  // taxonomy alias, or names a node the taxonomy no longer has (a tree edit
-  // made the classifier record obsolete in each case).
+  // core no longer appears in the preprocessed file or now resolves through
+  // a taxonomy alias (a tree edit made the classifier record obsolete in
+  // each case). A prior record naming a node the taxonomy no longer has was
+  // already dropped by readClassifications above.
   const finalMap = new Map<string, ClassificationItem>();
   for (const [core, item] of priorMap) {
     if (!preprocessedByCore.has(core)) continue;
     if (taxonomy.resolveAlias(core) !== undefined) continue;
-    // "none" is the classifier's sentinel for "did not place it", never a
-    // real taxonomy id (see jev.ts), so it never counts as a removed node.
-    if ("node" in item && typeof item.node === "string" && item.node !== "none" && !taxonomy.nodes.has(item.node)) continue;
     finalMap.set(core, item);
   }
   for (const item of freshlyBuilt) finalMap.set(item.core, item);
-  for (const item of toKeep) finalMap.set(item.core, item);
+  for (const item of groups.keep) finalMap.set(item.core, item);
   // Refresh counts from the current preprocessed file where available.
   for (const [core, item] of finalMap) {
     const current = preprocessedByCore.get(core);
@@ -340,17 +336,17 @@ async function main(): Promise<void> {
     none: 0,
     error: 0,
   };
-  for (const record of [...freshlyBuilt, ...toKeep]) statusCounts[record.status]++;
+  for (const record of [...freshlyBuilt, ...groups.keep]) statusCounts[record.status]++;
   const collapsedCount = freshlyBuilt.filter(
     (item) => item.status !== "override" && item.status !== "error" && item.collapsed,
   ).length;
 
   printReport(output, {
     selected: selected.length,
-    overrides: toOverride.length,
-    rebuilt: toRebuild.length,
-    stale: toStale.length,
-    kept: toKeep.length,
+    overrides: groups.override.length,
+    rebuilt: groups.rebuild.length,
+    stale: staleAsks.length,
+    kept: groups.keep.length,
     apiCalls,
     inputTokens,
     outputTokens,
@@ -444,7 +440,8 @@ function formatTop3(top3: Record<string, number> | null): string {
 function row(item: JevClassification, tail: string): string {
   const rc = fmt(item.rootConfidence);
   const nc = item.nodeConfidence !== null ? fmt(item.nodeConfidence) : "-";
-  return `${item.count}\t${item.core}\t→\t${item.node ?? "(root none)"} (${rc}/${nc})\t${tail}`;
+  const nodeLabel = item.node ?? (item.rawNodeChoice === null ? "(root none)" : "(none)");
+  return `${item.count}\t${item.core}\t→\t${nodeLabel} (${rc}/${nc})\t${tail}`;
 }
 
 /** A review or none row: the row plus the top-3 probabilities of the deepest answered question. */

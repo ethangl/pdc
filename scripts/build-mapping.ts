@@ -37,12 +37,9 @@ function bucketFor(count: number): string {
 
 async function main(): Promise<void> {
   const taxonomy = loadTaxonomy();
-  const overrides = readOverrides();
-  const classificationsFile = readClassifications();
-  const { lookup: classifications, skipped: skippedClassifications } = classificationLookup(
-    classificationsFile?.items ?? [],
-    (id) => taxonomy.nodes.has(id),
-  );
+  const overrides = readOverrides(taxonomy);
+  const { file: classificationsFile, droppedCores } = readClassifications(taxonomy);
+  const classifications = classificationLookup(classificationsFile?.items ?? []);
 
   const deps: ResolveDeps = {
     overrides,
@@ -184,8 +181,8 @@ async function main(): Promise<void> {
   const recipesWithOneUnresolved = recipes.filter((r) => r.unresolved?.length === 1).length;
   const recipesWithTwoPlusUnresolved = recipes.filter((r) => (r.unresolved?.length ?? 0) >= 2).length;
 
-  if (skippedClassifications.length > 0) {
-    console.log(`Ignored ${skippedClassifications.length} classifications naming removed nodes`);
+  if (droppedCores.length > 0) {
+    console.log(`Ignored ${droppedCores.length} classifications naming removed nodes`);
     console.log("");
   }
   console.log(`Recipes read:              ${recipesRead}`);

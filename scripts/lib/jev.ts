@@ -12,6 +12,7 @@ import {
   type PreprocessedItem,
   type OverrideClassification,
   type JevClassification,
+  type ClassificationItem,
 } from "./data-files.js";
 
 export const MODEL = "jev-latest";
@@ -169,6 +170,34 @@ export function writeJevCache(core: string, taxonomy: Taxonomy, response: Cached
   writeJson(cachePathFor(core, taxonomy), response);
 }
 
+export type Decision =
+  | { kind: "override" }
+  | { kind: "rebuild"; cached: CachedResponse }
+  | { kind: "keep"; prior: ClassificationItem }
+  | { kind: "ask"; reason: "refresh" | "stale" | "miss"; unknownIds: string[] };
+
+/** What to do with one selected item. Rules, in order: an override never
+ * reaches the API; --refresh always asks; a cache hit rebuilds; a stale
+ * cache entry asks even when a prior exists (the prior came from the same
+ * response); a cache miss keeps a prior unless it is an error record;
+ * otherwise ask. */
+export function decide(input: {
+  overridden: boolean;
+  refresh: boolean;
+  readCache: () => CacheRead;
+  prior: ClassificationItem | undefined;
+}): Decision {
+  if (input.overridden) return { kind: "override" };
+  if (input.refresh) return { kind: "ask", reason: "refresh", unknownIds: [] };
+
+  const cacheRead = input.readCache();
+  if (cacheRead.status === "hit") return { kind: "rebuild", cached: cacheRead.response };
+  if (cacheRead.status === "stale") return { kind: "ask", reason: "stale", unknownIds: cacheRead.unknownIds };
+
+  if (input.prior && input.prior.status !== "error") return { kind: "keep", prior: input.prior };
+  return { kind: "ask", reason: "miss", unknownIds: [] };
+}
+
 function top3(probabilities: Record<string, number>): Record<string, number> {
   return Object.fromEntries(Object.entries(probabilities).sort((a, b) => b[1] - a[1]).slice(0, 3));
 }
@@ -241,7 +270,7 @@ function deriveStatus(
   nodeConfidence: number | null,
 ): { status: JevClassification["status"]; node: string | null } {
   let status: JevClassification["status"];
-  if (root === NONE || node === null || node === NONE) {
+  if (root === NONE || node === null) {
     status = "none";
   } else if (nodeConfidence !== null && nodeConfidence >= CONFIDENCE_THRESHOLD) {
     status = "accepted";
@@ -276,7 +305,7 @@ export function buildRecord(item: PreprocessedItem, cached: CachedResponse, taxo
     rawNodeChoice = nodeAnswer.choice;
     nodeProbabilities = nodeAnswer.probabilities;
     const result = collapseNode(taxonomy, rawNodeChoice, nodeAnswer.probabilities);
-    node = result.node;
+    node = result.node === NONE ? null : result.node;
     nodeConfidence = result.nodeConfidence;
     collapsed = result.collapsed;
     nodeTop3 = top3(nodeAnswer.probabilities);
