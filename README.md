@@ -24,12 +24,20 @@ Design and decisions are in `docs/DESIGN.md`.
   Flags: `--limit N`, `--min-count N`, `--only-review`, `--refresh`,
   `--dry-run`.
 - `pnpm mapping` — write `data/recipes.json`, the app-facing file.
+- `pnpm app:data` — copy `recipes.json` and the taxonomy into the app bundle and write the matcher fixture. Run after `pnpm mapping`; commit the result.
 
 Curation loop after a change to the tree, the preprocessor, or the overrides:
 
 ```bash
 pnpm extract && pnpm coverage && pnpm classify && pnpm mapping
 ```
+
+## iOS app
+
+The app is `ios/PDC.xcodeproj`, opened in Xcode. It bundles `recipes.json`
+and the taxonomy as app resources; refresh them with `pnpm app:data` after
+`pnpm mapping`, and commit the result. Tests run with
+`xcodebuild -project ios/PDC.xcodeproj -scheme PDC -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test`.
 
 ## Data
 
