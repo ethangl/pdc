@@ -7,43 +7,31 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { validateTaxonomy, taxonomyFromRaw, type Taxonomy } from "./lib/taxonomy.js";
-import { TAXONOMY_PATH, REVIEW_DIR } from "./lib/paths.js";
+import { parseArgs as parseNodeArgs } from "node:util";
+import { loadTaxonomy, type Taxonomy } from "./lib/taxonomy.js";
+import { REVIEW_DIR } from "./lib/paths.js";
 import { readPreprocessed, type PreprocessedItem } from "./lib/data-files.js";
 
 const OUT_PATH = path.join(REVIEW_DIR, "coverage-unmatched.txt");
 const DEFAULT_LIMIT = 150;
 
 function parseArgs(argv: string[]): { limit: number; noValidate: boolean } {
+  const { values } = parseNodeArgs({
+    args: argv,
+    options: {
+      limit: { type: "string" },
+      "no-validate": { type: "boolean" },
+    },
+    strict: true,
+  });
+
   let limit = DEFAULT_LIMIT;
-  let noValidate = false;
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--limit") {
-      const value = Number(argv[i + 1]);
-      if (Number.isFinite(value) && value > 0) limit = Math.floor(value);
-      i++;
-    } else if (argv[i] === "--no-validate") {
-      noValidate = true;
-    }
-  }
-  return { limit, noValidate };
-}
-
-function loadTaxonomyForCoverage(noValidate: boolean): Taxonomy {
-  const content = fs.readFileSync(TAXONOMY_PATH, "utf8");
-  const raw = JSON.parse(content);
-
-  if (!noValidate) {
-    const problems = validateTaxonomy(raw);
-    if (problems.length > 0) {
-      console.error(`Taxonomy has ${problems.length} problem(s); not computing coverage:`);
-      for (const problem of problems) console.error(`  - ${problem}`);
-      console.error("Re-run with --no-validate to compute coverage anyway.");
-      process.exit(1);
-    }
+  if (values.limit !== undefined) {
+    const value = Number(values.limit);
+    if (Number.isFinite(value) && value > 0) limit = Math.floor(value);
   }
 
-  return taxonomyFromRaw(raw);
+  return { limit, noValidate: values["no-validate"] ?? false };
 }
 
 function formatPercent(part: number, total: number): string {
@@ -60,7 +48,14 @@ function flagsSummary(flags: PreprocessedItem["flags"]): string {
 
 function main(): void {
   const { limit, noValidate } = parseArgs(process.argv.slice(2));
-  const taxonomy = loadTaxonomyForCoverage(noValidate);
+  let taxonomy: Taxonomy;
+  try {
+    taxonomy = loadTaxonomy({ validate: !noValidate });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    console.error("Re-run with --no-validate to compute coverage anyway.");
+    process.exit(1);
+  }
 
   const preprocessed = readPreprocessed();
   const items = preprocessed.items;

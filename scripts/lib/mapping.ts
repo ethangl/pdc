@@ -50,15 +50,15 @@ export interface ResolveDeps {
 
 /** core -> node, keyed for resolveCandidate: accepted/override classifications
  * resolve as "classification", fallback classifications as "fallback".
- * Items with no node (status not yet resolved to one) are skipped. */
+ * Override items with no node ("not an ingredient") are skipped. */
 export function classificationLookup(items: ClassificationItem[]): ResolveDeps["classifications"] {
   const lookup: ResolveDeps["classifications"] = new Map();
   for (const item of items) {
-    if (typeof item.node !== "string") continue;
-    if (item.status === "accepted" || item.status === "override") {
+    if (item.status === "accepted" || item.status === "fallback") {
+      if (item.node === null) continue; // invariant: always a string node for these statuses
+      lookup.set(item.core, { nodeId: item.node, source: item.status === "fallback" ? "fallback" : "classification" });
+    } else if (item.status === "override" && item.node !== null) {
       lookup.set(item.core, { nodeId: item.node, source: "classification" });
-    } else if (item.status === "fallback") {
-      lookup.set(item.core, { nodeId: item.node, source: "fallback" });
     }
   }
   return lookup;
@@ -72,14 +72,7 @@ export interface ResolvedCandidate {
   source: ResolutionSource;
 }
 
-export interface LineResolution {
-  bucket: LineBucket;
-  /** Present when bucket is "requires" or "optional". */
-  requirement?: Requirement;
-  /** Present when bucket is "unresolved". Absent for "dropped": a line whose
-   * every candidate was overridden to null (not an ingredient, e.g. "to
-   * top", "spirit") is discarded entirely, not reported as unresolved. */
-  unresolved?: UnresolvedLine;
+interface ResolutionStats {
   /** Every candidate that resolved to a non-category node, in order. */
   resolvedCandidates: ResolvedCandidate[];
   /** Node ids hit by a candidate that resolved to a category (unusable). */
@@ -87,6 +80,16 @@ export interface LineResolution {
   /** Alternatives that failed to resolve while at least one other resolved. */
   unresolvedAlternatives: number;
 }
+
+/** A line whose every candidate was overridden to null (not an ingredient,
+ * e.g. "to top", "spirit") is discarded entirely: bucket "dropped", not
+ * reported as unresolved. */
+export type LineResolution = ResolutionStats &
+  (
+    | { bucket: "requires" | "optional"; requirement: Requirement }
+    | { bucket: "unresolved"; unresolved: UnresolvedLine }
+    | { bucket: "dropped" }
+  );
 
 type CandidateResult =
   | { status: "resolved"; nodeId: string; source: ResolutionSource }

@@ -4,7 +4,7 @@
 // same strings grouped by their deterministically preprocessed "core" name.
 // No LLM classification happens here.
 
-import { listCachedPunchFiles, readCachedPunchRecipe, ingredientLines } from "./lib/punchdrink-cache.js";
+import { cachedRecipes, ingredientLines } from "./lib/punchdrink-cache.js";
 import { preprocessIngredient } from "./lib/preprocess.js";
 import { writeJson, type RawIngredientsFile, type PreprocessedFile } from "./lib/data-files.js";
 import { INGREDIENTS_RAW_PATH, INGREDIENTS_PREPROCESSED_PATH } from "./lib/paths.js";
@@ -22,9 +22,17 @@ interface CoreAgg {
   slugs: string[];
 }
 
-async function main() {
-  const files = await listCachedPunchFiles();
+/** Records up to the first three distinct slugs an aggregate has been seen in. */
+function noteSlug(slugs: string[], slug: string): void {
+  if (slugs.length < 3 && !slugs.includes(slug)) slugs.push(slug);
+}
 
+/** Sorts [name, count] entries by count desc, then name asc. */
+function byCountDesc([nameA, countA]: [string, number], [nameB, countB]: [string, number]): number {
+  return countB - countA || nameA.localeCompare(nameB);
+}
+
+async function main() {
   const rawAgg = new Map<string, RawAgg>();
   const coreAgg = new Map<string, CoreAgg>();
   const removedCounts = new Map<string, number>();
@@ -32,8 +40,7 @@ async function main() {
   let recipeCount = 0;
   let lineCount = 0;
 
-  for (const filepath of files) {
-    const cached = await readCachedPunchRecipe(filepath);
+  for await (const cached of cachedRecipes()) {
     if (!cached.dataLayer.pagePostTerms?.meta) continue;
     recipeCount++;
 
@@ -47,9 +54,7 @@ async function main() {
         rawAgg.set(raw, rawEntry);
       }
       rawEntry.count++;
-      if (rawEntry.slugs.length < 3 && !rawEntry.slugs.includes(cached.slug)) {
-        rawEntry.slugs.push(cached.slug);
-      }
+      noteSlug(rawEntry.slugs, cached.slug);
 
       // --- deterministic preprocessing ---
       const processed = preprocessIngredient(raw, description);
@@ -77,9 +82,7 @@ async function main() {
       if (processed.preferred) {
         coreEntry.preferred.set(processed.preferred, (coreEntry.preferred.get(processed.preferred) ?? 0) + 1);
       }
-      if (coreEntry.slugs.length < 3 && !coreEntry.slugs.includes(cached.slug)) {
-        coreEntry.slugs.push(cached.slug);
-      }
+      noteSlug(coreEntry.slugs, cached.slug);
     }
   }
 
@@ -102,11 +105,11 @@ async function main() {
   const coreItems = [...coreAgg.entries()]
     .map(([core, agg]) => {
       const rawVariants = [...agg.rawCounts.entries()]
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .sort(byCountDesc)
         .slice(0, 12)
         .map(([variant]) => variant);
       const preferred = [...agg.preferred.entries()]
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .sort(byCountDesc)
         .slice(0, 8)
         .map(([brand]) => brand);
       return {
@@ -141,9 +144,7 @@ async function main() {
     },
     { houseMade: 0, optional: 0, infused: 0, garnishLike: 0 }
   );
-  const topRemoved = [...removedCounts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, 15);
+  const topRemoved = [...removedCounts.entries()].sort(byCountDesc).slice(0, 15);
 
   console.log(`Recipes read:      ${recipeCount}`);
   console.log(`Ingredient lines:  ${lineCount}`);

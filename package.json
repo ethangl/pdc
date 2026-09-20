@@ -8,11 +8,10 @@
   "scripts": {
     "extract": "tsx scripts/extract-ingredients.ts",
     "typecheck": "tsc --noEmit",
-    "check": "tsx scripts/preprocess-check.ts",
+    "test": "tsx --test scripts/*.test.ts",
     "taxonomy:check": "tsx scripts/taxonomy-check.ts",
     "coverage": "tsx scripts/coverage.ts",
     "classify": "tsx scripts/classify.ts",
-    "mapping:check": "tsx scripts/mapping-check.ts",
     "mapping": "tsx scripts/build-mapping.ts"
   },
   "dependencies": {

@@ -57,27 +57,46 @@ export function readPreprocessed(): PreprocessedFile {
 
 // --- curated/classifications.json ---
 
-export type ClassificationStatus = "accepted" | "review" | "none" | "error" | "override" | "fallback";
-
-/** One record in the committed classifications file. */
-export interface ClassificationItem {
+interface ClassificationBase {
   core: string;
   count: number;
-  status: ClassificationStatus;
+}
+
+/** Resolved by curated/overrides.json. `node` null means "not an ingredient". */
+export interface OverrideClassification extends ClassificationBase {
+  status: "override";
+  node: string | null;
   root: string | null;
-  rootConfidence: number | null;
+}
+
+/** The API call failed; nothing is known. */
+export interface ErrorClassification extends ClassificationBase {
+  status: "error";
+}
+
+/** Answered by Jev. Node-question fields are null when the root answer was
+ * "none" and the second request was skipped. */
+export interface JevClassification extends ClassificationBase {
+  status: "accepted" | "review" | "none" | "fallback";
+  root: string;
+  rootConfidence: number;
+  rootTop3: Record<string, number>;
   node: string | null;
   nodeConfidence: number | null;
-  rawNodeChoice: string | null;
-  collapsed: boolean;
-  isBrand: number | null;
-  isHousePrep: number | null;
-  isGarnish: number | null;
-  rootTop3: Record<string, number> | null;
   nodeTop3: Record<string, number> | null;
   nodeProbabilities: Record<string, number> | null;
-  fallbackApplied?: boolean;
+  rawNodeChoice: string | null;
+  collapsed: boolean;
+  /** Probability of "yes", from the SDK's NoulResponse.noul. */
+  isBrand: number;
+  isHousePrep: number;
+  isGarnish: number;
 }
+
+/** One record in the committed classifications file. */
+export type ClassificationItem = OverrideClassification | ErrorClassification | JevClassification;
+
+export type ClassificationStatus = ClassificationItem["status"];
 
 export interface ClassificationsFile {
   generatedAt: string;

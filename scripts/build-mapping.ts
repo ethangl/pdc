@@ -10,7 +10,7 @@
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import { loadTaxonomy } from "./lib/taxonomy.js";
-import { listCachedPunchFiles, readCachedPunchRecipe, extractRecipeName, ingredientLines } from "./lib/punchdrink-cache.js";
+import { cachedRecipes, extractRecipeName, ingredientLines } from "./lib/punchdrink-cache.js";
 import { preprocessIngredient } from "./lib/preprocess.js";
 import {
   resolveLine,
@@ -48,10 +48,9 @@ async function main(): Promise<void> {
     isCategory: taxonomy.isCategory,
   };
 
-  const files = await listCachedPunchFiles();
-
   const recipes: RecipeMapping[] = [];
 
+  let recipesRead = 0;
   let recipesSkippedNoLines = 0;
   let linesTotal = 0;
   let optionalLines = 0;
@@ -65,8 +64,8 @@ async function main(): Promise<void> {
   const requiresLengthHistogram = new Map<string, number>();
   let requiresZero = 0;
 
-  for (const filepath of files) {
-    const cached = await readCachedPunchRecipe(filepath);
+  for await (const cached of cachedRecipes()) {
+    recipesRead++;
     const lines = ingredientLines(cached);
 
     if (lines.length === 0) {
@@ -93,22 +92,28 @@ async function main(): Promise<void> {
       }
       unresolvedAlternativesTotal += resolution.unresolvedAlternatives;
 
-      if (resolution.bucket === "requires") {
-        requires.push(resolution.requirement!);
-      } else if (resolution.bucket === "optional") {
-        optional.push(resolution.requirement!);
-        optionalLines++;
-      } else if (resolution.bucket === "dropped") {
-        // Every candidate was overridden to null: not an ingredient at all.
-        droppedLinesTotal++;
-      } else {
-        unresolved.push(resolution.unresolved!);
-        unresolvedLinesTotal++;
-        const agg = unresolvedCoreAgg.get(resolution.unresolved!.core);
-        if (agg) {
-          agg.count++;
-        } else {
-          unresolvedCoreAgg.set(resolution.unresolved!.core, { count: 1, exampleSlug: cached.slug });
+      switch (resolution.bucket) {
+        case "requires":
+          requires.push(resolution.requirement);
+          break;
+        case "optional":
+          optional.push(resolution.requirement);
+          optionalLines++;
+          break;
+        case "dropped":
+          // Every candidate was overridden to null: not an ingredient at all.
+          droppedLinesTotal++;
+          break;
+        case "unresolved": {
+          unresolved.push(resolution.unresolved);
+          unresolvedLinesTotal++;
+          const agg = unresolvedCoreAgg.get(resolution.unresolved.core);
+          if (agg) {
+            agg.count++;
+          } else {
+            unresolvedCoreAgg.set(resolution.unresolved.core, { count: 1, exampleSlug: cached.slug });
+          }
+          break;
         }
       }
     }
@@ -155,7 +160,7 @@ async function main(): Promise<void> {
   const recipesWithOneUnresolved = recipes.filter((r) => r.unresolved?.length === 1).length;
   const recipesWithTwoPlusUnresolved = recipes.filter((r) => (r.unresolved?.length ?? 0) >= 2).length;
 
-  console.log(`Recipes read:              ${files.length}`);
+  console.log(`Recipes read:              ${recipesRead}`);
   console.log(`Recipes skipped (no lines): ${recipesSkippedNoLines}`);
   console.log(`Recipes in output:         ${recipes.length}`);
   console.log(`  fully resolved:          ${recipesFullyResolved}`);

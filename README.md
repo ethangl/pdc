@@ -9,7 +9,7 @@ Design and decisions are in `docs/DESIGN.md`.
 
 - `pnpm install` — install dependencies.
 - `pnpm typecheck` — type-check the scripts.
-- `pnpm check` — run the preprocessing assertion cases.
+- `pnpm test` — run the preprocessing and line-resolution test cases.
 - `pnpm extract` — read the cached recipes and write
   `data/ingredients-raw.json` and `data/ingredients-preprocessed.json`.
 - `pnpm taxonomy:check` — validate `curated/taxonomy.json` and print the tree.
@@ -19,7 +19,6 @@ Design and decisions are in `docs/DESIGN.md`.
   `TYPESAFE_API_KEY` in `.env.local`). Cached under `data/cache/jev/`.
   Flags: `--limit N`, `--min-count N`, `--only-review`, `--refresh`,
   `--dry-run`.
-- `pnpm mapping:check` — run the line-resolution assertion cases.
 - `pnpm mapping` — write `data/recipes.json`, the app-facing file.
 
 Curation loop after a change to the tree, the preprocessor, or the overrides:

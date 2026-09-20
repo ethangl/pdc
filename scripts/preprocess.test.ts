@@ -1,7 +1,8 @@
 #!/usr/bin/env tsx
-// Plain-script checks for scripts/lib/preprocess.ts. No test framework: run
-// with `pnpm check`, exits non-zero if any case fails.
+// node:test cases for scripts/lib/preprocess.ts. Run with `pnpm test`.
 
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import { preprocessIngredient, mentionsEditorsNote, type PreprocessedIngredient } from "./lib/preprocess.js";
 
 interface Case {
@@ -182,64 +183,35 @@ const cases: Case[] = [
 
   // Unicode normalization: decomposed accents (combining cedilla) must
   // normalize to precomposed form so taxonomy aliases still match.
-  { raw: "orange curaçao", core: "orange curaçao" },
+  { raw: "orange curaçao", core: "orange curaçao" },
 ];
 
-let failures = 0;
-
 for (const testCase of cases) {
-  const result = preprocessIngredient(testCase.raw);
-  const problems: string[] = [];
-
-  if (result.core !== testCase.core) {
-    problems.push(`core: expected ${JSON.stringify(testCase.core)}, got ${JSON.stringify(result.core)}`);
-  }
-  if (testCase.alternatives) {
-    const got = result.alternatives ?? [];
-    if (JSON.stringify(got) !== JSON.stringify(testCase.alternatives)) {
-      problems.push(
-        `alternatives: expected ${JSON.stringify(testCase.alternatives)}, got ${JSON.stringify(got)}`
-      );
+  test(testCase.raw, () => {
+    const result = preprocessIngredient(testCase.raw);
+    assert.equal(result.core, testCase.core);
+    if (testCase.alternatives) {
+      assert.deepEqual(result.alternatives ?? [], testCase.alternatives);
     }
-  }
-  if (testCase.preferred !== undefined && result.preferred !== testCase.preferred) {
-    problems.push(`preferred: expected ${JSON.stringify(testCase.preferred)}, got ${JSON.stringify(result.preferred)}`);
-  }
-  if (testCase.flags) {
-    for (const [key, expected] of Object.entries(testCase.flags)) {
-      const actual = result.flags[key as keyof PreprocessedIngredient["flags"]];
-      if (actual !== expected) {
-        problems.push(`flags.${key}: expected ${expected}, got ${actual}`);
+    if (testCase.preferred !== undefined) {
+      assert.equal(result.preferred, testCase.preferred);
+    }
+    if (testCase.flags) {
+      for (const [key, expected] of Object.entries(testCase.flags)) {
+        assert.equal(result.flags[key as keyof PreprocessedIngredient["flags"]], expected);
       }
     }
-  }
-
-  if (problems.length > 0) {
-    failures++;
-    console.error(`FAIL: ${JSON.stringify(testCase.raw)}`);
-    for (const problem of problems) {
-      console.error(`  ${problem}`);
-    }
-  }
+  });
 }
 
 // Descriptions are checked raw, with the site's curly apostrophe.
 const noteCases: Array<[string, boolean]> = [
-  ["(see Editor\u2019s Note)", true],
+  ["(see Editor’s Note)", true],
   ["(see Editor's Note)", true],
   ["(1:1, sugar:water)", false],
 ];
-let noteFailures = 0;
 for (const [text, expected] of noteCases) {
-  if (mentionsEditorsNote(text) !== expected) {
-    noteFailures++;
-    console.error(`FAIL: mentionsEditorsNote(${JSON.stringify(text)}) expected ${expected}`);
-  }
-}
-failures += noteFailures;
-
-console.log(`${cases.length + noteCases.length - failures}/${cases.length + noteCases.length} cases passed.`);
-
-if (failures > 0) {
-  process.exit(1);
+  test(`mentionsEditorsNote(${JSON.stringify(text)})`, () => {
+    assert.equal(mentionsEditorsNote(text), expected);
+  });
 }

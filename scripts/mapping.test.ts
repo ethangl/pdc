@@ -1,7 +1,8 @@
 #!/usr/bin/env tsx
-// Plain-script checks for scripts/lib/mapping.ts. No test framework: run
-// with `pnpm mapping:check`, exits non-zero if any case fails.
+// node:test cases for scripts/lib/mapping.ts. Run with `pnpm test`.
 
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import {
   resolveLine,
   dedupeRequirements,
@@ -144,56 +145,33 @@ const cases: Case[] = [
   },
 ];
 
-let failures = 0;
-
 for (const testCase of cases) {
-  const result = resolveLine(testCase.input, deps);
-  const problems: string[] = [];
+  test(testCase.name, () => {
+    const result = resolveLine(testCase.input, deps);
+    assert.equal(result.bucket, testCase.expectBucket);
 
-  if (result.bucket !== testCase.expectBucket) {
-    problems.push(`bucket: expected ${testCase.expectBucket}, got ${result.bucket}`);
-  }
-  if (testCase.expectNodes) {
-    const got = result.requirement?.nodes ?? [];
-    if (JSON.stringify(got) !== JSON.stringify(testCase.expectNodes)) {
-      problems.push(`nodes: expected ${JSON.stringify(testCase.expectNodes)}, got ${JSON.stringify(got)}`);
+    const requirement = "requirement" in result ? result.requirement : undefined;
+    if (testCase.expectNodes) {
+      assert.deepEqual(requirement?.nodes ?? [], testCase.expectNodes);
     }
-  }
-  if (testCase.expectHouseMade !== undefined && result.requirement?.houseMade !== testCase.expectHouseMade) {
-    problems.push(`houseMade: expected ${testCase.expectHouseMade}, got ${result.requirement?.houseMade}`);
-  }
-  if (testCase.expectCategoryHits) {
-    if (JSON.stringify(result.categoryHits) !== JSON.stringify(testCase.expectCategoryHits)) {
-      problems.push(
-        `categoryHits: expected ${JSON.stringify(testCase.expectCategoryHits)}, got ${JSON.stringify(result.categoryHits)}`
-      );
+    if (testCase.expectHouseMade !== undefined) {
+      assert.equal(requirement?.houseMade, testCase.expectHouseMade);
     }
-  }
-  if (
-    testCase.expectUnresolvedAlternatives !== undefined &&
-    result.unresolvedAlternatives !== testCase.expectUnresolvedAlternatives
-  ) {
-    problems.push(
-      `unresolvedAlternatives: expected ${testCase.expectUnresolvedAlternatives}, got ${result.unresolvedAlternatives}`
-    );
-  }
-  if (testCase.expectSubstitute !== undefined) {
-    const got = result.requirement?.substitute ?? false;
-    if (got !== testCase.expectSubstitute) {
-      problems.push(`substitute: expected ${testCase.expectSubstitute}, got ${got}`);
+    if (testCase.expectCategoryHits) {
+      assert.deepEqual(result.categoryHits, testCase.expectCategoryHits);
     }
-  }
-
-  if (problems.length > 0) {
-    failures++;
-    console.error(`FAIL: ${testCase.name}`);
-    for (const problem of problems) console.error(`  ${problem}`);
-  }
+    if (testCase.expectUnresolvedAlternatives !== undefined) {
+      assert.equal(result.unresolvedAlternatives, testCase.expectUnresolvedAlternatives);
+    }
+    if (testCase.expectSubstitute !== undefined) {
+      assert.equal(requirement?.substitute ?? false, testCase.expectSubstitute);
+    }
+  });
 }
 
 // --- dedupeRequirements ---
 
-{
+test("dedupe of identical nodes", () => {
   const input: Requirement[] = [
     { nodes: ["gin"], houseMade: false, raw: "gin" },
     { nodes: ["lime-juice"], houseMade: false, raw: "lime juice" },
@@ -204,34 +182,17 @@ for (const testCase of cases) {
     { nodes: ["gin"], houseMade: true, raw: "gin" },
     { nodes: ["lime-juice"], houseMade: false, raw: "lime juice" },
   ];
-  if (JSON.stringify(result) !== JSON.stringify(expected)) {
-    failures++;
-    console.error("FAIL: dedupe of identical nodes");
-    console.error(`  expected ${JSON.stringify(expected)}`);
-    console.error(`  got      ${JSON.stringify(result)}`);
-  }
-}
+  assert.deepEqual(result, expected);
+});
 
 // --- dedupeRequirements: substitute is ANDed across merged duplicates ---
 
-{
+test("dedupe ANDs substitute across merged duplicates", () => {
   const input: Requirement[] = [
     { nodes: ["simple-syrup"], houseMade: false, raw: "mystery syrup", substitute: true },
     { nodes: ["simple-syrup"], houseMade: false, raw: "simple syrup" },
   ];
   const result = dedupeRequirements(input);
   const expected = [{ nodes: ["simple-syrup"], houseMade: false, raw: "mystery syrup" }];
-  if (JSON.stringify(result) !== JSON.stringify(expected)) {
-    failures++;
-    console.error("FAIL: dedupe ANDs substitute across merged duplicates");
-    console.error(`  expected ${JSON.stringify(expected)}`);
-    console.error(`  got      ${JSON.stringify(result)}`);
-  }
-}
-
-const totalCases = cases.length + 2;
-console.log(`${totalCases - failures}/${totalCases} cases passed.`);
-
-if (failures > 0) {
-  process.exit(1);
-}
+  assert.deepEqual(result, expected);
+});

@@ -27,6 +27,8 @@ export interface Taxonomy {
   version: number;
   nodes: Map<string, TaxonomyNode>;
   roots: string[];
+  /** The node for `id`. Throws when `id` is not in the taxonomy. */
+  node(id: string): TaxonomyNode;
   childrenOf(id: string): string[];
   /** Nearest ancestor first, excludes the node itself. */
   ancestorsOf(id: string): string[];
@@ -259,16 +261,20 @@ export function taxonomyFromRaw(raw: unknown): Taxonomy {
     }
   }
 
+  function node(id: string): TaxonomyNode {
+    const found = nodes.get(id);
+    if (!found) throw new Error(`Unknown taxonomy node: ${id}`);
+    return found;
+  }
+
   function childrenOf(id: string): string[] {
     return childrenIndex.get(id) ?? [];
   }
 
   function ancestorsOf(id: string): string[] {
-    const node = nodes.get(id);
-    if (!node) throw new Error(`Unknown taxonomy node: ${id}`);
     const result: string[] = [];
     const seen = new Set<string>([id]);
-    let cursor: TaxonomyNode = node;
+    let cursor: TaxonomyNode = node(id);
     while (cursor.parent) {
       const parent = nodes.get(cursor.parent);
       if (!parent || seen.has(parent.id)) break;
@@ -316,6 +322,7 @@ export function taxonomyFromRaw(raw: unknown): Taxonomy {
     version: file.version,
     nodes,
     roots,
+    node,
     childrenOf,
     ancestorsOf,
     descendantsOf,
@@ -326,13 +333,18 @@ export function taxonomyFromRaw(raw: unknown): Taxonomy {
   };
 }
 
-export function loadTaxonomy(path = TAXONOMY_PATH): Taxonomy {
-  const content = fs.readFileSync(path, "utf8");
+/** Loads curated/taxonomy.json. Validates by default; pass `validate: false`
+ * to build a Taxonomy from data that may not pass validation. */
+export function loadTaxonomy(options: { validate?: boolean } = {}): Taxonomy {
+  const { validate = true } = options;
+  const content = fs.readFileSync(TAXONOMY_PATH, "utf8");
   const raw = JSON.parse(content);
 
-  const problems = validateTaxonomy(raw);
-  if (problems.length > 0) {
-    throw new Error(`Invalid taxonomy (${problems.length} problem(s)):\n${problems.join("\n")}`);
+  if (validate) {
+    const problems = validateTaxonomy(raw);
+    if (problems.length > 0) {
+      throw new Error(`Invalid taxonomy (${problems.length} problem(s)):\n${problems.join("\n")}`);
+    }
   }
 
   return taxonomyFromRaw(raw);

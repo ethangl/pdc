@@ -14,6 +14,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { parseArgs as parseNodeArgs } from "node:util";
 import type { TypeSafeClient } from "@typesafe-ai/sdk";
 import { loadTaxonomy, type Taxonomy } from "./lib/taxonomy.js";
 import { loadLocalEnv } from "./lib/env.js";
@@ -25,7 +26,6 @@ import {
   buildRootQuestions,
   buildNodeQuestions,
   buildRecord,
-  errorRecord,
   overrideRecord,
   createJevClient,
   readJevCache,
@@ -39,6 +39,7 @@ import {
   writeJson,
   type PreprocessedItem,
   type ClassificationItem,
+  type JevClassification,
   type ClassificationsFile,
   type ClassificationStatus,
 } from "./lib/data-files.js";
@@ -71,29 +72,36 @@ interface Args {
 }
 
 function parseArgs(argv: string[]): Args {
+  const { values } = parseNodeArgs({
+    args: argv,
+    options: {
+      limit: { type: "string" },
+      "min-count": { type: "string" },
+      refresh: { type: "boolean" },
+      "dry-run": { type: "boolean" },
+      "only-review": { type: "boolean" },
+    },
+    strict: true,
+  });
+
   let limit: number | null = null;
-  let minCount = 1;
-  let refresh = false;
-  let dryRun = false;
-  let onlyReview = false;
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--limit") {
-      const value = Number(argv[i + 1]);
-      if (Number.isFinite(value) && value > 0) limit = Math.floor(value);
-      i++;
-    } else if (argv[i] === "--min-count") {
-      const value = Number(argv[i + 1]);
-      if (Number.isFinite(value) && value >= 0) minCount = Math.floor(value);
-      i++;
-    } else if (argv[i] === "--refresh") {
-      refresh = true;
-    } else if (argv[i] === "--dry-run") {
-      dryRun = true;
-    } else if (argv[i] === "--only-review") {
-      onlyReview = true;
-    }
+  if (values.limit !== undefined) {
+    const value = Number(values.limit);
+    if (Number.isFinite(value) && value > 0) limit = Math.floor(value);
   }
-  return { limit, minCount, refresh, dryRun, onlyReview };
+  let minCount = 1;
+  if (values["min-count"] !== undefined) {
+    const value = Number(values["min-count"]);
+    if (Number.isFinite(value) && value >= 0) minCount = Math.floor(value);
+  }
+
+  return {
+    limit,
+    minCount,
+    refresh: values.refresh ?? false,
+    dryRun: values["dry-run"] ?? false,
+    onlyReview: values["only-review"] ?? false,
+  };
 }
 
 const STATUS_ORDER: Record<ClassificationStatus, number> = {
@@ -141,7 +149,7 @@ async function classifyViaApi(client: TypeSafeClient, item: PreprocessedItem, ta
   let outputTokens = 0;
   try {
     const state = buildState(item);
-    const request1 = await client.systemOne({ state, questions: buildRootQuestions(taxonomy), model: MODEL });
+    const request1 = await client.systemOne({ state, questions: buildRootQuestions(taxonomy) });
     calls++;
     inputTokens += request1.usage.input_tokens;
     outputTokens += request1.usage.output_tokens;
@@ -149,7 +157,7 @@ async function classifyViaApi(client: TypeSafeClient, item: PreprocessedItem, ta
     let request2: CachedResponse["request2"] = null;
     const rootChoice = request1.answers.root.choice;
     if (rootChoice !== "none") {
-      request2 = await client.systemOne({ state, questions: buildNodeQuestions(taxonomy, rootChoice), model: MODEL });
+      request2 = await client.systemOne({ state, questions: buildNodeQuestions(taxonomy, rootChoice) });
       calls++;
       inputTokens += request2.usage.input_tokens;
       outputTokens += request2.usage.output_tokens;
@@ -161,7 +169,7 @@ async function classifyViaApi(client: TypeSafeClient, item: PreprocessedItem, ta
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`  ${item.core}: ${message}`);
-    return { record: errorRecord(item), calls, inputTokens, outputTokens };
+    return { record: { core: item.core, count: item.count, status: "error" }, calls, inputTokens, outputTokens };
   }
 }
 
@@ -298,7 +306,9 @@ async function main(): Promise<void> {
     error: 0,
   };
   for (const record of [...freshlyBuilt, ...toKeep]) statusCounts[record.status]++;
-  const collapsedCount = freshlyBuilt.filter((item) => item.collapsed).length;
+  const collapsedCount = freshlyBuilt.filter(
+    (item) => item.status !== "override" && item.status !== "error" && item.collapsed,
+  ).length;
 
   printReport(output, {
     selected: selected.length,
@@ -346,8 +356,8 @@ function printReport(output: ClassificationsFile, stats: RunStats): void {
   console.log("");
 
   const REPORT_TOP_N = 40;
-  const reviewItems = output.items.filter((item) => item.status === "review");
-  const noneItems = output.items.filter((item) => item.status === "none");
+  const reviewItems = output.items.filter((item): item is JevClassification => item.status === "review");
+  const noneItems = output.items.filter((item): item is JevClassification => item.status === "none");
 
   console.log(`Top ${Math.min(REPORT_TOP_N, reviewItems.length)} review items:`);
   for (const item of reviewItems.slice(0, REPORT_TOP_N)) console.log(reviewRow(item));
@@ -360,14 +370,14 @@ function printReport(output: ClassificationsFile, stats: RunStats): void {
   // output.items is already sorted by status then count desc (sortItems),
   // so a fallback-status slice is already in highest-count-first order.
   const FALLBACK_REPORT_TOP_N = 30;
-  const fallbackItems = output.items.filter((item) => item.status === "fallback");
+  const fallbackItems = output.items.filter((item): item is JevClassification => item.status === "fallback");
   console.log(`Top ${Math.min(FALLBACK_REPORT_TOP_N, fallbackItems.length)} fallback items:`);
   for (const item of fallbackItems.slice(0, FALLBACK_REPORT_TOP_N)) console.log(row(item, item.rawNodeChoice ?? "-"));
   console.log("");
 
   const rootDistribution = new Map<string, { items: number; occurrences: number }>();
   for (const item of output.items) {
-    if (item.status !== "accepted" || !item.root) continue;
+    if (item.status !== "accepted") continue;
     const entry = rootDistribution.get(item.root) ?? { items: 0, occurrences: 0 };
     entry.items++;
     entry.occurrences += item.count;
@@ -393,14 +403,14 @@ function formatTop3(top3: Record<string, number> | null): string {
 }
 
 /** `count core → node (root/node conf) tail`, shared by the review/none and fallback tables. */
-function row(item: ClassificationItem, tail: string): string {
-  const rc = item.rootConfidence !== null ? fmt(item.rootConfidence) : "-";
+function row(item: JevClassification, tail: string): string {
+  const rc = fmt(item.rootConfidence);
   const nc = item.nodeConfidence !== null ? fmt(item.nodeConfidence) : "-";
   return `${item.count}\t${item.core}\t→\t${item.node ?? "(root none)"} (${rc}/${nc})\t${tail}`;
 }
 
 /** A review or none row: the row plus the top-3 probabilities of the deepest answered question. */
-function reviewRow(item: ClassificationItem): string {
+function reviewRow(item: JevClassification): string {
   return row(item, `| ${formatTop3(item.nodeTop3 ?? item.rootTop3)}`);
 }
 

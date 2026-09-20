@@ -12,30 +12,26 @@ export interface PunchdrinkDataLayer {
 
 export interface CachedPunchRecipe {
   slug: string;
-  filepath: string;
   sourceUrl: string;
   dataLayer: PunchdrinkDataLayer;
 }
 
-export async function listCachedPunchFiles(cacheDir = RAW_CACHE_DIR): Promise<string[]> {
+/** Every cached punchdrink recipe, read in sorted slug order. */
+export async function* cachedRecipes(cacheDir = RAW_CACHE_DIR): AsyncGenerator<CachedPunchRecipe> {
   const entries = await fs.readdir(cacheDir);
-  return entries
-    .filter((entry) => entry.endsWith(".json") && !entry.startsWith("."))
-    .sort()
-    .map((entry) => path.join(cacheDir, entry));
-}
+  const filenames = entries.filter((entry) => entry.endsWith(".json") && !entry.startsWith(".")).sort();
 
-export async function readCachedPunchRecipe(filepath: string): Promise<CachedPunchRecipe> {
-  const content = await fs.readFile(filepath, "utf8");
-  const dataLayer = JSON.parse(content) as PunchdrinkDataLayer;
-  const slug = path.basename(filepath, ".json");
+  for (const filename of filenames) {
+    const content = await fs.readFile(path.join(cacheDir, filename), "utf8");
+    const dataLayer = JSON.parse(content) as PunchdrinkDataLayer;
+    const slug = path.basename(filename, ".json");
 
-  return {
-    slug,
-    filepath,
-    sourceUrl: `https://punchdrink.com/recipes/${slug}/`,
-    dataLayer,
-  };
+    yield {
+      slug,
+      sourceUrl: `https://punchdrink.com/recipes/${slug}/`,
+      dataLayer,
+    };
+  }
 }
 
 /** One recipe's ingredient lines: the ingredient field (HTML-stripped,

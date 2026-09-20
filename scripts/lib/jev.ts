@@ -7,7 +7,12 @@ import * as path from "node:path";
 import { TypeSafeClient, choice, noul, type ChoiceCriteria, type SystemOneResult } from "@typesafe-ai/sdk";
 import type { Taxonomy } from "./taxonomy.js";
 import { JEV_CACHE_DIR } from "./paths.js";
-import { writeJson, type PreprocessedItem, type ClassificationStatus, type ClassificationItem } from "./data-files.js";
+import {
+  writeJson,
+  type PreprocessedItem,
+  type OverrideClassification,
+  type JevClassification,
+} from "./data-files.js";
 
 export const MODEL = "jev-latest";
 export const PROMPT_VERSION = "2";
@@ -32,14 +37,14 @@ function topExampleNames(taxonomy: Taxonomy, id: string, limit: number): string 
   return taxonomy
     .childrenOf(id)
     .slice(0, limit)
-    .map((childId) => taxonomy.nodes.get(childId)!.name)
+    .map((childId) => taxonomy.node(childId).name)
     .join(", ");
 }
 
 function rootCriteria(taxonomy: Taxonomy): ChoiceCriteria {
   const criteria: Record<string, string> = {};
   for (const rootId of taxonomy.roots) {
-    const node = taxonomy.nodes.get(rootId)!;
+    const node = taxonomy.node(rootId);
     const examples = topExampleNames(taxonomy, rootId, 6);
     criteria[rootId] = taxonomy.isCategory(rootId)
       ? `${node.name}: e.g. ${examples}`
@@ -67,7 +72,7 @@ function nodeCriteria(taxonomy: Taxonomy, rootId: string): ChoiceCriteria {
 
   const criteria: Record<string, string> = {};
   for (const id of candidateIds) {
-    const node = taxonomy.nodes.get(id)!;
+    const node = taxonomy.node(id);
     const hasChildren = taxonomy.childrenOf(id).length > 0;
     let description = hasChildren ? `${node.name} (generic, any style)` : node.name;
     if (node.aliases && node.aliases.length > 0) {
@@ -101,7 +106,7 @@ export interface CachedResponse {
 }
 
 /** A cache key stable across reruns, tied to the taxonomy and prompt version. */
-export function cacheKeyFor(core: string, taxonomyVersion: number, promptVersion: string): string {
+function cacheKeyFor(core: string, taxonomyVersion: number, promptVersion: string): string {
   return crypto.createHash("sha1").update(`${core}|${taxonomyVersion}|${promptVersion}`).digest("hex");
 }
 
@@ -172,59 +177,43 @@ function collapseNode(taxonomy: Taxonomy, rawChoice: string, probabilities: Reco
   return { node: best!.node, nodeConfidence: best!.mass, collapsed: best!.node !== rawChoice };
 }
 
-/** Every nullable field null, ready for a builder to overwrite what it knows. */
-function emptyRecord(item: PreprocessedItem, status: ClassificationStatus): ClassificationItem {
-  return {
-    core: item.core,
-    count: item.count,
-    status,
-    root: null,
-    rootConfidence: null,
-    node: null,
-    nodeConfidence: null,
-    rawNodeChoice: null,
-    collapsed: false,
-    isBrand: null,
-    isHousePrep: null,
-    isGarnish: null,
-    rootTop3: null,
-    nodeTop3: null,
-    nodeProbabilities: null,
-  };
-}
-
-function statusFor(root: string, node: string | null, nodeConfidence: number | null): ClassificationStatus {
-  if (root === NONE || node === null || node === NONE) return "none";
-  // A confident node answer subsumes a noisy root answer: accept on the
-  // node alone, regardless of root confidence.
-  if (nodeConfidence !== null && nodeConfidence >= CONFIDENCE_THRESHOLD) return "accepted";
-  return "review";
-}
-
 /**
- * A string the classifier confidently places in a family but cannot place
- * at a specific node (status "review" or "none" on the node question) is a
- * substitute for that family's designated fallback node, when the root
- * carries one (see curated/taxonomy.json's `fallback` field and
- * docs/DESIGN.md). Confidence is judged on the root answer alone: the node
- * question already failed to resolve, so its confidence cannot gate this.
+ * The status for a root/node answer pair, with the family fallback applied
+ * when the node question did not resolve. A string the classifier
+ * confidently places in a family but cannot place at a specific node
+ * (status "review" or "none" on the node question) is a substitute for that
+ * family's designated fallback node, when the root carries one (see
+ * curated/taxonomy.json's `fallback` field and docs/DESIGN.md). Fallback
+ * confidence is judged on the root answer alone: the node question already
+ * failed to resolve, so its confidence cannot gate this. A confident node
+ * answer subsumes a noisy root answer: accept on the node alone, regardless
+ * of root confidence.
  */
-function applyFallback(
+function deriveStatus(
   taxonomy: Taxonomy,
   root: string,
   rootConfidence: number,
-  status: ClassificationStatus,
   node: string | null,
-): { status: ClassificationStatus; node: string | null; fallbackApplied: boolean } {
-  if (status !== "review" && status !== "none") return { status, node, fallbackApplied: false };
-  if (root === NONE || rootConfidence < CONFIDENCE_THRESHOLD) return { status, node, fallbackApplied: false };
+  nodeConfidence: number | null,
+): { status: JevClassification["status"]; node: string | null } {
+  let status: JevClassification["status"];
+  if (root === NONE || node === null || node === NONE) {
+    status = "none";
+  } else if (nodeConfidence !== null && nodeConfidence >= CONFIDENCE_THRESHOLD) {
+    status = "accepted";
+  } else {
+    status = "review";
+  }
+
+  if (status !== "review" && status !== "none") return { status, node };
+  if (root === NONE || rootConfidence < CONFIDENCE_THRESHOLD) return { status, node };
   const fallback = taxonomy.fallbackFor(root);
-  if (fallback === undefined) return { status, node, fallbackApplied: false };
-  return { status: "fallback", node: fallback, fallbackApplied: true };
+  if (fallback === undefined) return { status, node };
+  return { status: "fallback", node: fallback };
 }
 
 /** Turns the two raw API responses (request2 may be skipped) into the committed record shape. */
-export function buildRecord(item: PreprocessedItem, cached: CachedResponse, taxonomy: Taxonomy): ClassificationItem {
+export function buildRecord(item: PreprocessedItem, cached: CachedResponse, taxonomy: Taxonomy): JevClassification {
   const rootAnswer = cached.request1.answers.root;
   const { isBrand, isHousePrep, isGarnish } = cached.request1.answers;
 
@@ -249,15 +238,16 @@ export function buildRecord(item: PreprocessedItem, cached: CachedResponse, taxo
     nodeTop3 = top3(nodeAnswer.probabilities);
   }
 
-  const baseStatus = statusFor(root, node, nodeConfidence);
-  const fallback = applyFallback(taxonomy, root, rootConfidence, baseStatus, node);
+  const derived = deriveStatus(taxonomy, root, rootConfidence, node, nodeConfidence);
 
   return {
-    ...emptyRecord(item, fallback.status),
+    core: item.core,
+    count: item.count,
+    status: derived.status,
     root,
     rootConfidence,
     rootTop3,
-    node: fallback.node,
+    node: derived.node,
     nodeConfidence,
     nodeTop3,
     nodeProbabilities,
@@ -266,22 +256,11 @@ export function buildRecord(item: PreprocessedItem, cached: CachedResponse, taxo
     isBrand: isBrand.noul,
     isHousePrep: isHousePrep.noul,
     isGarnish: isGarnish.noul,
-    ...(fallback.fallbackApplied ? { fallbackApplied: true } : {}),
   };
-}
-
-/** A record for an item that failed classification (network/API error). The
- * error message is not part of the committed shape. */
-export function errorRecord(item: PreprocessedItem): ClassificationItem {
-  return emptyRecord(item, "error");
 }
 
 /** A record for an item resolved by curated/overrides.json, skipping the API entirely. */
-export function overrideRecord(item: PreprocessedItem, taxonomy: Taxonomy, nodeId: string | null): ClassificationItem {
+export function overrideRecord(item: PreprocessedItem, taxonomy: Taxonomy, nodeId: string | null): OverrideClassification {
   const root = nodeId !== null ? taxonomy.rootOf(nodeId) : null;
-  return {
-    ...emptyRecord(item, "override"),
-    root,
-    node: nodeId,
-  };
+  return { core: item.core, count: item.count, status: "override", node: nodeId, root };
 }
