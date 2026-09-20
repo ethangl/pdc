@@ -9,6 +9,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseArgs as parseNodeArgs } from "node:util";
 import { loadTaxonomy, type Taxonomy } from "./lib/taxonomy.js";
+import { parsePositiveInt, stripPnpmSeparator } from "./lib/cli.js";
 import { REVIEW_DIR } from "./lib/paths.js";
 import { readPreprocessed, type PreprocessedItem } from "./lib/data-files.js";
 
@@ -16,12 +17,8 @@ const OUT_PATH = path.join(REVIEW_DIR, "coverage-unmatched.txt");
 const DEFAULT_LIMIT = 150;
 
 function parseArgs(argv: string[]): { limit: number; noValidate: boolean } {
-  // See classify.ts's parseArgs: pnpm forwards a literal "--" separator when
-  // invoked as `pnpm coverage -- --limit 10`; drop one leading "--" so that
-  // and the no-separator form behave alike under strict parsing.
-  if (argv[0] === "--") argv = argv.slice(1);
   const { values } = parseNodeArgs({
-    args: argv,
+    args: stripPnpmSeparator(argv),
     options: {
       limit: { type: "string" },
       "no-validate": { type: "boolean" },
@@ -29,13 +26,10 @@ function parseArgs(argv: string[]): { limit: number; noValidate: boolean } {
     strict: true,
   });
 
-  let limit = DEFAULT_LIMIT;
-  if (values.limit !== undefined) {
-    const value = Number(values.limit);
-    if (Number.isFinite(value) && value > 0) limit = Math.floor(value);
-  }
-
-  return { limit, noValidate: values["no-validate"] ?? false };
+  return {
+    limit: parsePositiveInt("limit", values.limit) ?? DEFAULT_LIMIT,
+    noValidate: values["no-validate"] ?? false,
+  };
 }
 
 function formatPercent(part: number, total: number): string {

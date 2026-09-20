@@ -1,17 +1,17 @@
 // Pure helpers and network-calling functions for scripts/crawl-punch.ts.
 // Kept separate so the pure parsing logic (extractSlug, parseSitemapLocs,
-// extractDataLayer, extractRecipeName) can be unit-tested without a network.
+// extractDataLayer, recipeNameFromHtml) can be unit-tested without a network.
 
-import { stripHtml } from "./punchdrink-cache.js";
+import { stripHtml, type PunchdrinkDataLayer } from "./punchdrink-cache.js";
 
-export const ALGOLIA_INDEX = "wp_posts_recipe";
-export const ALGOLIA_HITS_PER_PAGE = 50;
-export const ALGOLIA_MAX_PAGES = 40;
-export const SITEMAP_URL_BASE = "https://punchdrink.com/recipe-sitemap";
+const ALGOLIA_INDEX = "wp_posts_recipe";
+const ALGOLIA_HITS_PER_PAGE = 50;
+const ALGOLIA_MAX_PAGES = 40;
+const SITEMAP_URL_BASE = "https://punchdrink.com/recipe-sitemap";
 // Safety bound on how many numbered sitemap files to try; the site has four
 // today and a non-200 response ends the series long before this is reached.
 const SITEMAP_MAX_FILES = 40;
-export const DESKTOP_USER_AGENT =
+const DESKTOP_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
 const FETCH_TIMEOUT_MS = 30_000;
@@ -45,7 +45,7 @@ export function parseSitemapLocs(xml: string): string[] {
  * the payload can itself contain `}` inside a string). Throws with a clear
  * message when the marker, an opening brace, a balanced close, or valid JSON
  * is missing. */
-export function extractDataLayer(html: string): Record<string, unknown> {
+export function extractDataLayer(html: string): PunchdrinkDataLayer {
   const marker = "dataLayer_content = ";
   const markerStart = html.indexOf(marker);
   if (markerStart === -1) {
@@ -87,7 +87,7 @@ export function extractDataLayer(html: string): Record<string, unknown> {
 
   const jsonText = html.slice(braceStart, braceEnd + 1);
   try {
-    return JSON.parse(jsonText) as Record<string, unknown>;
+    return JSON.parse(jsonText) as PunchdrinkDataLayer;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`dataLayer_content did not parse as JSON: ${message}`);
@@ -96,7 +96,7 @@ export function extractDataLayer(html: string): Record<string, unknown> {
 
 /** The recipe title from the page's first `<h1 ...>...</h1>`, HTML-stripped
  * and trimmed. Null when the page has no `<h1>`. */
-export function extractRecipeName(html: string): string | null {
+export function recipeNameFromHtml(html: string): string | null {
   const match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
   if (!match) return null;
   const name = stripHtml(match[1]).trim();
@@ -105,19 +105,17 @@ export function extractRecipeName(html: string): string | null {
 
 // --- discovery ---
 
-export interface AlgoliaHit {
+interface AlgoliaHit {
   permalink: string;
-  post_modified?: string;
-  post_title?: string;
 }
 
-export interface AlgoliaQueryResponse {
+interface AlgoliaQueryResponse {
   hits: AlgoliaHit[];
   nbPages: number;
 }
 
 /** One page of the Algolia `wp_posts_recipe` index, newest first. */
-export async function queryAlgoliaPage(
+async function queryAlgoliaPage(
   appId: string,
   apiKey: string,
   page: number,
@@ -143,6 +141,29 @@ export interface DiscoveredRecipe {
   slug: string;
 }
 
+/** The shared new-recipe selection step: for each URL, extracts the slug,
+ * skips URLs with no slug, skips slugs already seen (marking new ones as
+ * seen), and skips slugs already cached. Returns the rest, in order, up to
+ * `limit`. Mutates `seen` so a caller can dedupe across repeated calls
+ * (Algolia's cross-page dedupe). */
+export function selectNew(
+  urls: Iterable<string>,
+  seen: Set<string>,
+  isCached: (slug: string) => boolean,
+  limit: number | undefined,
+): DiscoveredRecipe[] {
+  const selected: DiscoveredRecipe[] = [];
+  for (const url of urls) {
+    const slug = extractSlug(url);
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+    if (isCached(slug)) continue;
+    selected.push({ url, slug });
+    if (limit !== undefined && selected.length >= limit) break;
+  }
+  return selected;
+}
+
 export interface AlgoliaDiscoveryOptions {
   appId: string;
   apiKey: string;
@@ -150,33 +171,32 @@ export interface AlgoliaDiscoveryOptions {
   isCached: (slug: string) => boolean;
   /** Stop once this many new (uncached) slugs have been found. */
   limit?: number;
-  maxPages?: number;
   onPage?: (info: { page: number; nbPages: number; totalSeen: number; newSlugs: number }) => void;
   fetchImpl?: typeof fetch;
 }
 
 /** Pages through the Algolia index newest-first, collecting slugs not
  * already cached. Stops when a page (after page 0) adds zero new uncached
- * slugs, when `limit` new slugs have been found, or after `maxPages`. */
+ * slugs, when `limit` new slugs have been found, or after `ALGOLIA_MAX_PAGES`. */
 export async function discoverViaAlgolia(options: AlgoliaDiscoveryOptions): Promise<DiscoveredRecipe[]> {
-  const { appId, apiKey, isCached, limit, maxPages = ALGOLIA_MAX_PAGES, onPage, fetchImpl = fetch } = options;
+  const { appId, apiKey, isCached, limit, onPage, fetchImpl = fetch } = options;
 
   const seen = new Set<string>();
   const discovered: DiscoveredRecipe[] = [];
 
-  for (let page = 0; page < maxPages; page++) {
+  for (let page = 0; page < ALGOLIA_MAX_PAGES; page++) {
     const response = await queryAlgoliaPage(appId, apiKey, page, fetchImpl);
     if (response.hits.length === 0) break;
 
-    let newOnThisPage = 0;
-    for (const hit of response.hits) {
-      const slug = extractSlug(hit.permalink);
-      if (!slug || seen.has(slug)) continue;
-      seen.add(slug);
-      if (isCached(slug)) continue;
-      discovered.push({ url: hit.permalink, slug });
-      newOnThisPage++;
-    }
+    const remaining = limit === undefined ? undefined : limit - discovered.length;
+    const added = selectNew(
+      response.hits.map((hit) => hit.permalink),
+      seen,
+      isCached,
+      remaining,
+    );
+    discovered.push(...added);
+    const newOnThisPage = added.length;
 
     onPage?.({ page, nbPages: response.nbPages, totalSeen: seen.size, newSlugs: discovered.length });
 
@@ -184,16 +204,27 @@ export async function discoverViaAlgolia(options: AlgoliaDiscoveryOptions): Prom
     if (newOnThisPage === 0 && page > 0) break;
   }
 
-  return limit !== undefined ? discovered.slice(0, limit) : discovered;
+  return discovered;
 }
 
 function sitemapUrl(n: number): string {
   return n === 1 ? `${SITEMAP_URL_BASE}.xml` : `${SITEMAP_URL_BASE}${n}.xml`;
 }
 
+export interface SitemapDiscoveryOptions {
+  /** True when the slug is already present in the raw cache. */
+  isCached: (slug: string) => boolean;
+  /** Stop once this many new (uncached) slugs have been found. */
+  limit?: number;
+  fetchImpl?: typeof fetch;
+}
+
 /** Fetches recipe-sitemap.xml, recipe-sitemap2.xml, ... in order, stopping
- * at the first non-200 response (a 404 on a later number ends the series). */
-export async function discoverViaSitemap(fetchImpl: typeof fetch = fetch): Promise<string[]> {
+ * at the first non-ok response (a 404 on a later number ends the series),
+ * then selects new (uncached) recipes from the concatenated URLs in order. */
+export async function discoverViaSitemap(options: SitemapDiscoveryOptions): Promise<DiscoveredRecipe[]> {
+  const { isCached, limit, fetchImpl = fetch } = options;
+
   const urls: string[] = [];
   for (let n = 1; n <= SITEMAP_MAX_FILES; n++) {
     const url = sitemapUrl(n);
@@ -202,60 +233,79 @@ export async function discoverViaSitemap(fetchImpl: typeof fetch = fetch): Promi
     const xml = await response.text();
     urls.push(...parseSitemapLocs(xml));
   }
-  return urls;
+
+  return selectNew(urls, new Set<string>(), isCached, limit);
 }
 
 // --- fetching a recipe page ---
 
 export class FetchBlockedError extends Error {
-  constructor(
-    public readonly status: number,
-    url: string,
-  ) {
+  constructor(status: number, url: string) {
     super(`Blocked fetching ${url}: HTTP ${status}`);
     this.name = "FetchBlockedError";
   }
 }
 
-function sleep(ms: number): Promise<void> {
+export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Fetches one recipe page's HTML with a desktop Chrome User-Agent, a 30 s
- * timeout, and two retries with backoff on network errors and 5xx
- * responses. A 403 or 429 throws `FetchBlockedError` immediately, without
- * retrying, so the caller can stop the whole run. */
-export async function fetchRecipePage(url: string, fetchImpl: typeof fetch = fetch): Promise<string> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+/** Runs one fetch attempt for `url`: owns the `AbortController`, its 30 s
+ * timeout, and the response classification. Throws `FetchBlockedError` on
+ * 403/429 and a plain `Error` on any other non-ok, non-5xx status; neither
+ * retries. Returns (does not throw) an `Error` for a network error, an
+ * abort, or a 5xx response, so the caller can retry. Returns the body
+ * string on ok. */
+async function attemptFetch(url: string, fetchImpl: typeof fetch): Promise<string | Error> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    let response: Response;
     try {
-      const response = await fetchImpl(url, {
+      response = await fetchImpl(url, {
         headers: { "User-Agent": DESKTOP_USER_AGENT },
         signal: controller.signal,
       });
-
-      if (response.status === 403 || response.status === 429) {
-        throw new FetchBlockedError(response.status, url);
-      }
-      if (response.status >= 500) {
-        throw new Error(`Server error fetching ${url}: HTTP ${response.status}`);
-      }
-      if (!response.ok) {
-        throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
-      }
-      return await response.text();
     } catch (err) {
-      if (err instanceof FetchBlockedError) throw err;
-      lastError = err;
-      if (attempt < RETRY_DELAYS_MS.length) {
-        await sleep(RETRY_DELAYS_MS[attempt]);
-        continue;
-      }
-    } finally {
-      clearTimeout(timeout);
+      return err instanceof Error ? err : new Error(String(err));
+    }
+
+    if (response.status === 403 || response.status === 429) {
+      throw new FetchBlockedError(response.status, url);
+    }
+    if (response.status >= 500) {
+      return new Error(`Server error fetching ${url}: HTTP ${response.status}`);
+    }
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
+    }
+    return await response.text();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** Fetches one recipe page's HTML with a desktop Chrome User-Agent. A 403
+ * or 429 throws `FetchBlockedError` immediately, so the caller can stop the
+ * whole run. Any other non-ok status (including 404) throws immediately
+ * too. It will not resolve on retry. A network error, an abort, or a 5xx
+ * response is retried, up to twice, with backoff.
+ *
+ * `retryDelaysMs` defaults to the real backoff and exists as a seam for
+ * tests, which pass near-zero delays to exercise retries without waiting. */
+export async function fetchRecipePage(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+  retryDelaysMs: number[] = RETRY_DELAYS_MS,
+): Promise<string> {
+  let lastError!: Error;
+  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt++) {
+    const result = await attemptFetch(url, fetchImpl);
+    if (typeof result === "string") return result;
+    lastError = result;
+    if (attempt < retryDelaysMs.length) {
+      await sleep(retryDelaysMs[attempt]);
     }
   }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  throw lastError;
 }
