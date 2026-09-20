@@ -13,12 +13,13 @@ struct InventoryView: View {
     @State private var showsStockedOnly = false
 
     var body: some View {
+        let stockedIds = stocked.nodeIds
         NavigationStack {
             List {
-                ForEach(filteredSections) { section in
+                ForEach(filteredSections(stockedIds: stockedIds)) { section in
                     Section(section.root.name) {
                         ForEach(section.nodes) { node in
-                            InventoryRow(node: node, isStocked: stocked.nodeIds.contains(node.id)) {
+                            InventoryRow(node: node, isStocked: stockedIds.contains(node.id)) {
                                 Stock.toggle(node.id, in: modelContext)
                             }
                         }
@@ -44,9 +45,8 @@ struct InventoryView: View {
 
     /// `catalog.browseSections` narrowed by "stocked only" and the search
     /// text; a section with no matching rows is dropped.
-    private var filteredSections: [Catalog.BrowseSection] {
-        let stockedIds = stocked.nodeIds
-        return catalog.browseSections.compactMap { section in
+    private func filteredSections(stockedIds: Set<String>) -> [Catalog.BrowseSection] {
+        catalog.browseSections.compactMap { section in
             let nodes = section.nodes.filter { node in
                 (!showsStockedOnly || stockedIds.contains(node.id)) && matchesSearch(node)
             }

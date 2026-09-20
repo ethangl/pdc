@@ -62,12 +62,14 @@ struct FixtureTests {
         }
     }
 
-    @Test func evaluatesTheFullCatalogQuickly() {
-        let inventory = Inventory(catalog: Self.catalog, stocked: Self.catalog.stapleIds)
+    /// Times what RecipeListView.body does on every inventory change: build
+    /// the Inventory, evaluate every recipe, and rank the results.
+    @Test func ranksTheFullCatalogQuickly() {
         let start = DispatchTime.now()
-        _ = Matcher.evaluate(Self.catalog, inventory: inventory)
+        let inventory = Inventory(catalog: Self.catalog, stocked: Self.catalog.stapleIds)
+        _ = Matcher.evaluate(Self.catalog, inventory: inventory).ranked()
         let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
-        print("Matcher.evaluate over the full catalog took \(elapsedMs) ms")
+        print("Inventory + evaluate + ranked over the full catalog took \(elapsedMs) ms")
         #expect(elapsedMs < 200)
     }
 }

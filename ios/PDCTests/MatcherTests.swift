@@ -2,6 +2,7 @@
 // small synthetic catalog. See docs/APP.md "Matching" and "Testing".
 
 import Testing
+import Foundation
 @testable import PDC
 
 private enum Synthetic {
@@ -52,7 +53,7 @@ private enum Synthetic {
         optional: [Requirement] = [],
         unresolved: [UnresolvedLine] = []
     ) -> Recipe {
-        Recipe(slug: slug, name: name ?? slug, url: "https://example.com/\(slug)", requires: requires, optional: optional, unresolved: unresolved)
+        Recipe(slug: slug, name: name ?? slug, url: URL(string: "https://example.com/\(slug)")!, requires: requires, optional: optional, unresolved: unresolved)
     }
 
     static func inventory(_ stocked: Set<String>, in catalog: Catalog) -> Inventory {
@@ -136,6 +137,13 @@ struct MatcherTests {
         let catalog = Synthetic.catalog(recipes: [])
         let inventory = Synthetic.inventory(["london-dry-gin"], in: catalog)
         #expect(inventory.provider(for: ["gin"]) == "london-dry-gin")
+    }
+
+    @Test func directlyStockedNodeProvidesItselfEvenWhenAChildIsStocked() {
+        let catalog = Synthetic.catalog(recipes: [])
+        let inventory = Synthetic.inventory(["gin", "london-dry-gin"], in: catalog)
+        #expect(inventory.provider(for: ["gin"]) == "gin")
+        #expect(inventory.provider(for: ["london-dry-gin"]) == "london-dry-gin")
     }
 
     @Test func providerReturnsTheFirstMatchingAlternative() {

@@ -43,7 +43,7 @@ struct UnresolvedLine: Decodable, Sendable, Hashable {
 struct Recipe: Decodable, Sendable, Identifiable, Hashable {
     let slug: String
     let name: String
-    let url: String
+    let url: URL
     let requires: [Requirement]
     let optional: [Requirement]
     let unresolved: [UnresolvedLine]
@@ -53,7 +53,7 @@ struct Recipe: Decodable, Sendable, Identifiable, Hashable {
     init(
         slug: String,
         name: String,
-        url: String,
+        url: URL,
         requires: [Requirement],
         optional: [Requirement] = [],
         unresolved: [UnresolvedLine] = []
@@ -74,7 +74,7 @@ struct Recipe: Decodable, Sendable, Identifiable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         slug = try container.decode(String.self, forKey: .slug)
         name = try container.decode(String.self, forKey: .name)
-        url = try container.decode(String.self, forKey: .url)
+        url = try container.decode(URL.self, forKey: .url)
         requires = try container.decode([Requirement].self, forKey: .requires)
         optional = try container.decodeIfPresent([Requirement].self, forKey: .optional) ?? []
         unresolved = try container.decodeIfPresent([UnresolvedLine].self, forKey: .unresolved) ?? []

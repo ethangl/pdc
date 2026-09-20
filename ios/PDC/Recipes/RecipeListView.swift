@@ -1,6 +1,6 @@
 // The Recipes tab: the ranked, sectioned list. See docs/APP.md "Screens"
-// and "Makeability and ranking". Recomputing the ranking in `body` costs
-// about 8ms over the full catalog (measured in FixtureTests); no caching
+// and "Makeability and ranking". The ranking is recomputed in `body` on
+// every inventory change; FixtureTests bounds the full cost. No caching
 // here per docs/APP.md "Architecture".
 
 import SwiftUI
@@ -71,8 +71,7 @@ struct RecipeListView: View {
         let filtered = filteredResults
         let grouped = Dictionary(grouping: filtered) { MakeabilityBucket(unmet: $0.unmet) }
         return MakeabilityBucket.allCases.compactMap { bucket in
-            guard let results = grouped[bucket], !results.isEmpty else { return nil }
-            return BucketSection(bucket: bucket, results: results)
+            grouped[bucket].map { BucketSection(bucket: bucket, results: $0) }
         }
     }
 }

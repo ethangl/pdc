@@ -60,9 +60,7 @@ struct RecipeDetailView: View {
         .navigationTitle(recipe.name)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $isShowingSafari) {
-            if let url = URL(string: recipe.url) {
-                SafariView(url: url)
-            }
+            SafariView(url: recipe.url)
         }
     }
 

@@ -9,17 +9,20 @@ import Foundation
 /// satisfied when any of its `nodes` is in this set, which is O(1) per
 /// requirement after the O(stocked x depth) build.
 struct Inventory: Sendable {
-    /// Satisfied node id -> the stocked node that satisfies it (itself for
-    /// a directly stocked node, otherwise the descendant that provides it).
+    /// Satisfied node id -> the stocked node that satisfies it: itself for
+    /// a directly stocked node, otherwise the first stocked descendant in
+    /// sorted order, so the choice is deterministic.
     private let providedBy: [String: String]
 
     init(catalog: Catalog, stocked: Set<String>) {
         var providedBy: [String: String] = [:]
         for node in stocked.sorted() {
-            providedBy[node] = providedBy[node] ?? node
             for ancestor in catalog.ancestors(of: node) {
                 providedBy[ancestor] = providedBy[ancestor] ?? node
             }
+        }
+        for node in stocked {
+            providedBy[node] = node
         }
         self.providedBy = providedBy
     }
