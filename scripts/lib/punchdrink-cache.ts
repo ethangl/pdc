@@ -18,13 +18,15 @@ export interface CachedPunchRecipe {
 }
 
 /** Sorted slugs of every cached recipe (filenames ending in `.json`, not
- * starting with `.`). Empty when the cache directory does not exist. */
+ * starting with `.`). Empty when the cache directory does not exist;
+ * rethrows any other error reading the directory. */
 export function cachedSlugs(cacheDir = RAW_CACHE_DIR): string[] {
   let entries: string[];
   try {
     entries = fsSync.readdirSync(cacheDir);
-  } catch {
-    return [];
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw err;
   }
   // Sort filenames (with their .json extension), not the stripped slugs: a
   // slug that is a prefix of another (e.g. "alfonso" vs "alfonso-xiii")
@@ -36,15 +38,28 @@ export function cachedSlugs(cacheDir = RAW_CACHE_DIR): string[] {
 }
 
 /** Writes one recipe's data layer to the cache, creating the directory if
- * needed. */
+ * needed. Writes to a `.tmp` file first and renames it onto the final name,
+ * so a reader never sees a partial write. The `.tmp` suffix already fails
+ * `cachedSlugs`'s `.json` filter, so a leftover temp file is invisible to
+ * readers rather than merely partial. */
 export function writeCachedRecipe(slug: string, record: PunchdrinkDataLayer, cacheDir = RAW_CACHE_DIR): void {
   fsSync.mkdirSync(cacheDir, { recursive: true });
-  fsSync.writeFileSync(path.join(cacheDir, `${slug}.json`), JSON.stringify(record, null, 2));
+  const finalPath = path.join(cacheDir, `${slug}.json`);
+  const tmpPath = `${finalPath}.tmp`;
+  fsSync.writeFileSync(tmpPath, JSON.stringify(record, null, 2));
+  fsSync.renameSync(tmpPath, finalPath);
 }
 
-/** Every cached punchdrink recipe, read in sorted slug order. */
+/** Every cached punchdrink recipe, read in sorted slug order. Throws when
+ * the cache is empty or missing: an empty cache is never a valid input for
+ * extract or mapping. */
 export async function* cachedRecipes(cacheDir = RAW_CACHE_DIR): AsyncGenerator<CachedPunchRecipe> {
-  for (const slug of cachedSlugs(cacheDir)) {
+  const slugs = cachedSlugs(cacheDir);
+  if (slugs.length === 0) {
+    throw new Error(`Raw cache at ${cacheDir} is empty or missing. Run pnpm crawl first.`);
+  }
+
+  for (const slug of slugs) {
     const content = await fs.readFile(path.join(cacheDir, `${slug}.json`), "utf8");
     const dataLayer = JSON.parse(content) as PunchdrinkDataLayer;
 

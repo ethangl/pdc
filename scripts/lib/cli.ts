@@ -10,10 +10,11 @@ export function stripPnpmSeparator(argv: string[]): string[] {
 
 /** Parses a `--<flag>` value as a positive integer. Returns null when
  * `value` is undefined (the flag was not given). Throws when it is given
- * but is not a finite number greater than 0. */
+ * but is not an integer greater than 0 (so "10.5" and "0" are rejected,
+ * not silently rounded or ignored). */
 export function parsePositiveInt(flag: string, value: string | undefined): number | null {
   if (value === undefined) return null;
   const n = Number(value);
-  if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  if (Number.isInteger(n) && n > 0) return n;
   throw new Error(`--${flag} must be a positive integer, got ${value}`);
 }

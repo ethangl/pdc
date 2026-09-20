@@ -16,14 +16,19 @@ import {
   FetchBlockedError,
 } from "./lib/punchdrink-crawl.js";
 
+interface FakeCall {
+  url: string;
+  init?: RequestInit;
+}
+
 /** A `fetch` replacement that returns the given responses in order and
- * records the URLs it was called with. Throws if called more times than
+ * records the URL and init of every call. Throws if called more times than
  * there are queued responses. */
-function fakeFetch(responses: Response[]): { fetchImpl: typeof fetch; calls: string[] } {
-  const calls: string[] = [];
+function fakeFetch(responses: Response[]): { fetchImpl: typeof fetch; calls: FakeCall[] } {
+  const calls: FakeCall[] = [];
   let next = 0;
-  const fetchImpl = (async (input: string | URL | Request) => {
-    calls.push(String(input));
+  const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
     const response = responses[next++];
     if (!response) throw new Error(`fakeFetch: no response queued for call ${calls.length}`);
     return response;
@@ -35,6 +40,10 @@ function algoliaPage(permalinks: string[], nbPages = 1): Response {
   return new Response(JSON.stringify({ hits: permalinks.map((permalink) => ({ permalink })), nbPages }), {
     status: 200,
   });
+}
+
+function sitemapXmlFor(slug: string): string {
+  return `<urlset><url><loc>https://punchdrink.com/recipes/${slug}/</loc></url></urlset>`;
 }
 
 // --- extractSlug ---
@@ -61,6 +70,17 @@ test("parseSitemapLocs keeps recipe locs and drops the archive page and non-reci
   <url><loc>https://punchdrink.com/2024/01/01/some-article/</loc></url>
 </urlset>`;
   assert.deepEqual(parseSitemapLocs(xml), ["https://punchdrink.com/recipes/mai-tai/"]);
+});
+
+test("parseSitemapLocs strips a CDATA wrapper and still reads a plain loc", () => {
+  const xml = `<urlset>
+  <url><loc><![CDATA[https://punchdrink.com/recipes/mai-tai/]]></loc></url>
+  <url><loc>https://punchdrink.com/recipes/negroni/</loc></url>
+</urlset>`;
+  assert.deepEqual(parseSitemapLocs(xml), [
+    "https://punchdrink.com/recipes/mai-tai/",
+    "https://punchdrink.com/recipes/negroni/",
+  ]);
 });
 
 // --- extractDataLayer ---
@@ -118,6 +138,12 @@ test("selectNew skips null slugs, already-seen slugs, and cached slugs, and stop
     { url: "https://punchdrink.com/recipes/b/", slug: "b" },
   ]);
   assert.ok(seen.has("cached"), "a cached slug is still marked seen");
+});
+
+test("selectNew returns nothing when limit is 0", () => {
+  const urls = ["https://punchdrink.com/recipes/a/"];
+  const selected = selectNew(urls, new Set(), () => false, 0);
+  assert.deepEqual(selected, []);
 });
 
 // --- discoverViaAlgolia ---
@@ -209,12 +235,10 @@ test("discoverViaAlgolia skips cached and duplicate permalinks", async () => {
 // --- discoverViaSitemap ---
 
 test("discoverViaSitemap fetches sitemap 1, 2, 3 and stops at the first non-ok response", async () => {
-  const sitemapXml = (slug: string) =>
-    `<urlset><url><loc>https://punchdrink.com/recipes/${slug}/</loc></url></urlset>`;
   const { fetchImpl, calls } = fakeFetch([
-    new Response(sitemapXml("a"), { status: 200 }),
-    new Response(sitemapXml("b"), { status: 200 }),
-    new Response(sitemapXml("c"), { status: 200 }),
+    new Response(sitemapXmlFor("a"), { status: 200 }),
+    new Response(sitemapXmlFor("b"), { status: 200 }),
+    new Response(sitemapXmlFor("c"), { status: 200 }),
     new Response("", { status: 404 }),
   ]);
 
@@ -247,6 +271,44 @@ test("discoverViaSitemap applies limit and isCached", async () => {
   );
 });
 
+test("discoverViaSitemap throws on a 404 for the first file", async () => {
+  const { fetchImpl } = fakeFetch([new Response("", { status: 404 })]);
+
+  await assert.rejects(() => discoverViaSitemap({ isCached: () => false, fetchImpl }), /Failed to fetch .* HTTP 404/);
+});
+
+test("discoverViaSitemap throws on a 500 for a later file", async () => {
+  const { fetchImpl } = fakeFetch([new Response(sitemapXmlFor("a"), { status: 200 }), new Response("", { status: 500 })]);
+
+  await assert.rejects(() => discoverViaSitemap({ isCached: () => false, fetchImpl }), /Failed to fetch .* HTTP 500/);
+});
+
+test("discoverViaSitemap throws when the sitemaps yield no recipe URLs", async () => {
+  const { fetchImpl } = fakeFetch([new Response("<urlset></urlset>", { status: 200 }), new Response("", { status: 404 })]);
+
+  await assert.rejects(
+    () => discoverViaSitemap({ isCached: () => false, fetchImpl }),
+    /No recipe URLs found in the sitemaps/,
+  );
+});
+
+test("discoverViaSitemap sends the same desktop User-Agent as fetchRecipePage", async () => {
+  const { fetchImpl: sitemapFetch, calls: sitemapCalls } = fakeFetch([
+    new Response(sitemapXmlFor("a"), { status: 200 }),
+    new Response("", { status: 404 }),
+  ]);
+  await discoverViaSitemap({ isCached: () => false, fetchImpl: sitemapFetch });
+
+  const { fetchImpl: pageFetch, calls: pageCalls } = fakeFetch([new Response("<html>ok</html>", { status: 200 })]);
+  await fetchRecipePage("https://punchdrink.com/recipes/a/", pageFetch);
+
+  const headerValue = (init?: RequestInit) => (init?.headers as Record<string, string> | undefined)?.["User-Agent"];
+  const sitemapUserAgent = headerValue(sitemapCalls[0].init);
+
+  assert.ok(sitemapUserAgent, "sitemap request sent a User-Agent header");
+  assert.equal(sitemapUserAgent, headerValue(pageCalls[0].init));
+});
+
 // --- fetchRecipePage ---
 
 test("fetchRecipePage throws FetchBlockedError on 403 without retrying", async () => {
@@ -268,6 +330,23 @@ test("fetchRecipePage throws on 404 without retrying", async () => {
 
 test("fetchRecipePage retries a 500 once and returns the body on the following 200", async () => {
   const { fetchImpl, calls } = fakeFetch([new Response("", { status: 500 }), new Response("<html>ok</html>", { status: 200 })]);
+
+  const body = await fetchRecipePage("https://punchdrink.com/recipes/a/", fetchImpl, [0]);
+
+  assert.equal(body, "<html>ok</html>");
+  assert.equal(calls.length, 2);
+});
+
+test("fetchRecipePage retries when a 200 response's body stream errors, and returns the following 200's body", async () => {
+  // A response whose body errors partway through the read (e.g. a dropped
+  // connection while streaming), rather than failing at the fetch() call.
+  const brokenBody = new ReadableStream({
+    start(controller) {
+      controller.error(new Error("stream broke"));
+    },
+  });
+  const broken = new Response(brokenBody, { status: 200 });
+  const { fetchImpl, calls } = fakeFetch([broken, new Response("<html>ok</html>", { status: 200 })]);
 
   const body = await fetchRecipePage("https://punchdrink.com/recipes/a/", fetchImpl, [0]);
 

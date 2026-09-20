@@ -27,11 +27,13 @@ export function extractSlug(url: string): string | null {
 }
 
 /** `<loc>` URLs from a sitemap XML document that point at a recipe page
- * (contain `/recipes/`) and are not the archive listing page itself. */
+ * (contain `/recipes/`) and are not the archive listing page itself. Strips
+ * an optional `<![CDATA[ ... ]]>` wrapper around the loc text first. */
 export function parseSitemapLocs(xml: string): string[] {
   const urls: string[] = [];
-  for (const match of xml.matchAll(/<loc>([^<]*)<\/loc>/g)) {
-    const url = match[1].trim();
+  for (const match of xml.matchAll(/<loc>([\s\S]*?)<\/loc>/g)) {
+    const cdata = match[1].match(/^<!\[CDATA\[([\s\S]*)\]\]>$/);
+    const url = (cdata ? cdata[1] : match[1]).trim();
     if (url.includes("/recipes/") && !url.endsWith("/recipe-archives/")) {
       urls.push(url);
     }
@@ -154,25 +156,28 @@ export function selectNew(
 ): DiscoveredRecipe[] {
   const selected: DiscoveredRecipe[] = [];
   for (const url of urls) {
+    if (limit !== undefined && selected.length >= limit) break;
     const slug = extractSlug(url);
     if (!slug || seen.has(slug)) continue;
     seen.add(slug);
     if (isCached(slug)) continue;
     selected.push({ url, slug });
-    if (limit !== undefined && selected.length >= limit) break;
   }
   return selected;
 }
 
-export interface AlgoliaDiscoveryOptions {
-  appId: string;
-  apiKey: string;
+export interface DiscoveryOptions {
   /** True when the slug is already present in the raw cache. */
   isCached: (slug: string) => boolean;
   /** Stop once this many new (uncached) slugs have been found. */
   limit?: number;
-  onPage?: (info: { page: number; nbPages: number; totalSeen: number; newSlugs: number }) => void;
   fetchImpl?: typeof fetch;
+}
+
+export interface AlgoliaDiscoveryOptions extends DiscoveryOptions {
+  appId: string;
+  apiKey: string;
+  onPage?: (info: { page: number; nbPages: number; totalSeen: number; newSlugs: number }) => void;
 }
 
 /** Pages through the Algolia index newest-first, collecting slugs not
@@ -196,12 +201,11 @@ export async function discoverViaAlgolia(options: AlgoliaDiscoveryOptions): Prom
       remaining,
     );
     discovered.push(...added);
-    const newOnThisPage = added.length;
 
     onPage?.({ page, nbPages: response.nbPages, totalSeen: seen.size, newSlugs: discovered.length });
 
     if (limit !== undefined && discovered.length >= limit) break;
-    if (newOnThisPage === 0 && page > 0) break;
+    if (added.length === 0 && page > 0) break;
   }
 
   return discovered;
@@ -211,27 +215,31 @@ function sitemapUrl(n: number): string {
   return n === 1 ? `${SITEMAP_URL_BASE}.xml` : `${SITEMAP_URL_BASE}${n}.xml`;
 }
 
-export interface SitemapDiscoveryOptions {
-  /** True when the slug is already present in the raw cache. */
-  isCached: (slug: string) => boolean;
-  /** Stop once this many new (uncached) slugs have been found. */
-  limit?: number;
-  fetchImpl?: typeof fetch;
-}
-
-/** Fetches recipe-sitemap.xml, recipe-sitemap2.xml, ... in order, stopping
- * at the first non-ok response (a 404 on a later number ends the series),
- * then selects new (uncached) recipes from the concatenated URLs in order. */
-export async function discoverViaSitemap(options: SitemapDiscoveryOptions): Promise<DiscoveredRecipe[]> {
+/** Fetches recipe-sitemap.xml, recipe-sitemap2.xml, ... in order, sending
+ * the same desktop User-Agent as recipe pages. A 404 on the second file or
+ * later ends the series (the site simply has fewer sitemaps than
+ * `SITEMAP_MAX_FILES`). Any other non-ok status, or a 404 on the first
+ * file, throws `Error("Failed to fetch <url>: HTTP <status>")`. Throws
+ * `Error("No recipe URLs found in the sitemaps")` when the series yields
+ * none. Otherwise selects new (uncached) recipes from the concatenated URLs
+ * in order. */
+export async function discoverViaSitemap(options: DiscoveryOptions): Promise<DiscoveredRecipe[]> {
   const { isCached, limit, fetchImpl = fetch } = options;
 
   const urls: string[] = [];
   for (let n = 1; n <= SITEMAP_MAX_FILES; n++) {
     const url = sitemapUrl(n);
-    const response = await fetchImpl(url);
-    if (!response.ok) break;
+    const response = await fetchImpl(url, { headers: { "User-Agent": DESKTOP_USER_AGENT } });
+    if (!response.ok) {
+      if (response.status === 404 && n >= 2) break;
+      throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
+    }
     const xml = await response.text();
     urls.push(...parseSitemapLocs(xml));
+  }
+
+  if (urls.length === 0) {
+    throw new Error("No recipe URLs found in the sitemaps");
   }
 
   return selectNew(urls, new Set<string>(), isCached, limit);
@@ -254,8 +262,9 @@ export function sleep(ms: number): Promise<void> {
  * timeout, and the response classification. Throws `FetchBlockedError` on
  * 403/429 and a plain `Error` on any other non-ok, non-5xx status; neither
  * retries. Returns (does not throw) an `Error` for a network error, an
- * abort, or a 5xx response, so the caller can retry. Returns the body
- * string on ok. */
+ * abort, a 5xx response, or a body read that fails partway (e.g. a dropped
+ * connection while streaming), so the caller can retry any of them the same
+ * way. Returns the body string on ok. */
 async function attemptFetch(url: string, fetchImpl: typeof fetch): Promise<string | Error> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -279,7 +288,12 @@ async function attemptFetch(url: string, fetchImpl: typeof fetch): Promise<strin
     if (!response.ok) {
       throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
     }
-    return await response.text();
+
+    try {
+      return await response.text();
+    } catch (err) {
+      return err instanceof Error ? err : new Error(String(err));
+    }
   } finally {
     clearTimeout(timeout);
   }
@@ -298,14 +312,12 @@ export async function fetchRecipePage(
   fetchImpl: typeof fetch = fetch,
   retryDelaysMs: number[] = RETRY_DELAYS_MS,
 ): Promise<string> {
-  let lastError!: Error;
-  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt++) {
-    const result = await attemptFetch(url, fetchImpl);
-    if (typeof result === "string") return result;
-    lastError = result;
-    if (attempt < retryDelaysMs.length) {
-      await sleep(retryDelaysMs[attempt]);
-    }
+  let result = await attemptFetch(url, fetchImpl);
+  for (const delay of retryDelaysMs) {
+    if (typeof result === "string") break;
+    await sleep(delay);
+    result = await attemptFetch(url, fetchImpl);
   }
-  throw lastError;
+  if (typeof result === "string") return result;
+  throw result;
 }

@@ -76,6 +76,8 @@ strings stay unresolved and block the recipe.
 - Fetching uses plain HTTP. The page embeds `dataLayer_content` inline, so
   the crawler parses it from the HTML. PD1 and PD2 used Puppeteer for this;
   it is not needed. One request per second, and a 403 or 429 stops the run.
+  A sitemap request that fails with anything other than a 404 on a later
+  file also stops the run.
 - Rebuilds read the cache. They never re-crawl.
 - After a crawl, the curation loop runs: extract, coverage, classify,
   mapping. Only ingredient strings the tree does not already resolve reach
