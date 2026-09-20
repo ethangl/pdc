@@ -242,7 +242,7 @@
     { "id": "sweet-wine", "name": "Sweet wine", "parent": "wine", "aliases": ["sauternes", "dessert wine", "moscato", "moscato d'asti", "late harvest wine", "ice wine", "vin santo", "manischewitz", "manischewitz wine", "tokaji"] },
     { "id": "rose-wine", "name": "Rosé", "parent": "wine", "aliases": ["rose", "rosé wine", "rose wine", "dry rosé", "dry rosé wine", "dry rose"] },
     { "id": "orange-wine", "name": "Orange wine", "parent": "wine", "aliases": ["skin-contact wine", "skin contact wine"] },
-    { "id": "sake", "name": "Sake", "parent": "wine", "aliases": ["saké", "junmai sake", "nigori sake", "nigori", "junmai", "daiginjo"] },
+    { "id": "sake", "name": "Sake", "parent": "wine", "aliases": ["saké", "junmai sake", "nigori sake", "nigori", "junmai", "daiginjo", "ginjo sake", "ginjo", "junmai ginjo", "junmai ginjo sake", "tokubetsu junmai"] },
     { "id": "piquette", "name": "Piquette", "parent": "wine" },
 
     { "id": "beer-cider", "name": "Beer and cider", "kind": "category" },
@@ -386,7 +386,7 @@
     { "id": "tea", "name": "Tea", "parent": "mixer", "aliases": ["brewed tea", "iced tea", "hot tea"] },
     { "id": "black-tea", "name": "Black tea", "parent": "tea", "aliases": ["iced black tea", "strong black tea", "darjeeling tea", "assam tea", "english breakfast tea", "ceylon tea", "lapsang souchong", "lapsang souchong tea", "brewed black tea", "cold black tea"] },
     { "id": "earl-grey-tea", "name": "Earl Grey tea", "parent": "black-tea", "aliases": ["earl grey", "brewed earl grey tea"] },
-    { "id": "green-tea", "name": "Green tea", "parent": "tea", "aliases": ["matcha", "sencha", "genmaicha", "jasmine tea", "jasmine green tea", "brewed green tea"] },
+    { "id": "green-tea", "name": "Green tea", "parent": "tea", "aliases": ["matcha", "sencha", "genmaicha", "jasmine tea", "jasmine green tea", "brewed green tea", "matcha powder"] },
     { "id": "oolong-tea", "name": "Oolong tea", "parent": "tea", "aliases": ["oolong"] },
     { "id": "chai", "name": "Chai", "parent": "tea", "aliases": ["chai tea", "masala chai", "spiced tea"] },
     { "id": "herbal-tea", "name": "Herbal tea", "parent": "tea", "aliases": ["chamomile tea", "hibiscus tea", "rooibos tea", "brewed rooibos tea", "rooibos", "mint tea", "peppermint tea", "yerba mate", "yerba mate tea", "lemon verbena tea", "dandelion root tea", "ginger tea", "vanilla hemp tea", "butterfly pea flower tea"] },
