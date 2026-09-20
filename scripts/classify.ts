@@ -18,6 +18,7 @@ import { parseArgs as parseNodeArgs } from "node:util";
 import type { TypeSafeClient } from "@typesafe-ai/sdk";
 import { loadTaxonomy, type Taxonomy } from "./lib/taxonomy.js";
 import { loadLocalEnv } from "./lib/env.js";
+import { parsePositiveInt, stripPnpmSeparator } from "./lib/cli.js";
 import { CLASSIFICATIONS_PATH, JEV_CACHE_DIR, REVIEW_DIR } from "./lib/paths.js";
 import {
   MODEL,
@@ -73,12 +74,8 @@ interface Args {
 }
 
 function parseArgs(argv: string[]): Args {
-  // pnpm forwards a literal "--" separator when invoked as `pnpm classify --
-  // --dry-run`; strict parseArgs treats anything after it as a positional
-  // and rejects it. Drop one leading "--" so both invocations behave alike.
-  if (argv[0] === "--") argv = argv.slice(1);
   const { values } = parseNodeArgs({
-    args: argv,
+    args: stripPnpmSeparator(argv),
     options: {
       limit: { type: "string" },
       "min-count": { type: "string" },
@@ -89,11 +86,8 @@ function parseArgs(argv: string[]): Args {
     strict: true,
   });
 
-  let limit: number | null = null;
-  if (values.limit !== undefined) {
-    const value = Number(values.limit);
-    if (Number.isFinite(value) && value > 0) limit = Math.floor(value);
-  }
+  // --min-count allows 0 (unlike --limit's "positive integer"), so it keeps
+  // its own parsing rather than using parsePositiveInt.
   let minCount = 1;
   if (values["min-count"] !== undefined) {
     const value = Number(values["min-count"]);
@@ -101,7 +95,7 @@ function parseArgs(argv: string[]): Args {
   }
 
   return {
-    limit,
+    limit: parsePositiveInt("limit", values.limit),
     minCount,
     refresh: values.refresh ?? false,
     dryRun: values["dry-run"] ?? false,

@@ -71,9 +71,17 @@ strings stay unresolved and block the recipe.
 - The raw punchdrink.com cache (`data/source/punchdrink/<slug>.json`, one
   file per recipe, the page's `dataLayer_content`) is the durable source.
   Crawling only adds slugs that are missing from the cache. Discovery uses
-  the Algolia index first and the recipe sitemaps as a full fallback, as in
-  PD1 and PD2.
+  the Algolia index first (newest first, stops when it reaches cached
+  slugs) and the recipe sitemaps as a full fallback, as in PD1 and PD2.
+- Fetching uses plain HTTP. The page embeds `dataLayer_content` inline, so
+  the crawler parses it from the HTML. PD1 and PD2 used Puppeteer for this;
+  it is not needed. One request per second, and a 403 or 429 stops the run.
+  A sitemap request that fails with anything other than a 404 on a later
+  file also stops the run.
 - Rebuilds read the cache. They never re-crawl.
+- After a crawl, the curation loop runs: extract, coverage, classify,
+  mapping. Only ingredient strings the tree does not already resolve reach
+  the classifier.
 
 ### Classification
 
@@ -164,4 +172,8 @@ model from a written brief. Design notes live in `docs/`.
 
 - Substitutes for unplaceable strings outside the syrup and bitters families
   (house mixes, one-off liqueurs).
+- Recipes edited on punchdrink.com after they were cached. The Algolia
+  index exposes `post_modified`; the crawler could compare it with the
+  cached `updatedDate` and refetch. Not done: rebuilds never re-crawl, and
+  edits to old recipes are rare.
 - When Convex comes back: shared review UI, or over-the-air data only.
