@@ -52,7 +52,9 @@ export interface ResolveDeps {
  * resolve as "classification", fallback classifications as "fallback".
  * Items with status "override" are skipped here: resolveCandidate checks
  * curated/overrides.json itself first, so an override classification record
- * is never consulted through this lookup. */
+ * is never consulted through this lookup. Callers pass items already read
+ * through `readClassifications`, which has already dropped any record
+ * naming a node the taxonomy no longer has. */
 export function classificationLookup(items: ClassificationItem[]): ResolveDeps["classifications"] {
   const lookup: ResolveDeps["classifications"] = new Map();
   for (const item of items) {

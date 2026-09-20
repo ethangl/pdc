@@ -100,10 +100,11 @@ Pipeline for each distinct raw ingredient string:
    stated style therefore resolves to the generic node, which is the correct
    answer under the matching rules.
 4. Confidence gating. Accept at or above 0.9. Queue the rest for manual
-   review. Results are cached by (string, tree version, tree structure hash,
-   prompt version) in
-   `data/cache/jev/` and summarized in `data/classifications.json`.
-5. Manual overrides in `data/overrides.json` win over the classifier.
+   review. Results are cached by (string, tree version, prompt version) in
+   `data/cache/jev/` and summarized in `curated/classifications.json`. A cached
+   response that names a node the tree no longer has is treated as a miss
+   and re-asked; adding nodes does not invalidate the cache.
+5. Manual overrides in `curated/overrides.json` win over the classifier.
 
 Why Jev: the problem is a closed-set decision with a need for calibrated
 confidence, which is what Jev is built for. The first live run (60 strings,

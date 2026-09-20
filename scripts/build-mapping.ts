@@ -37,8 +37,8 @@ function bucketFor(count: number): string {
 
 async function main(): Promise<void> {
   const taxonomy = loadTaxonomy();
-  const overrides = readOverrides();
-  const classificationsFile = readClassifications();
+  const overrides = readOverrides(taxonomy);
+  const { file: classificationsFile, droppedCores } = readClassifications(taxonomy);
   const classifications = classificationLookup(classificationsFile?.items ?? []);
 
   const deps: ResolveDeps = {
@@ -59,6 +59,9 @@ async function main(): Promise<void> {
   let droppedOptionalTotal = 0;
   let unresolvedAlternativesTotal = 0;
   const sourceCounts: Record<ResolutionSource, number> = { override: 0, alias: 0, classification: 0, fallback: 0 };
+  // Every string resolveLine was asked about, to report override keys that
+  // can never fire (a typo in a hand-edited key otherwise does nothing silently).
+  const seenCandidates = new Set<string>();
   const categoryHitCounts = new Map<string, number>();
   let categoryHitsTotal = 0;
   const unresolvedCoreAgg = new Map<string, { count: number; exampleSlug: string }>();
@@ -83,6 +86,7 @@ async function main(): Promise<void> {
       linesTotal++;
 
       const processed = preprocessIngredient(raw, description);
+      for (const candidate of processed.alternatives ?? [processed.core]) seenCandidates.add(candidate);
       const resolution = resolveLine(processed, deps);
 
       for (const candidate of resolution.resolvedCandidates) {
@@ -181,6 +185,16 @@ async function main(): Promise<void> {
   const recipesWithOneUnresolved = recipes.filter((r) => r.unresolved?.length === 1).length;
   const recipesWithTwoPlusUnresolved = recipes.filter((r) => (r.unresolved?.length ?? 0) >= 2).length;
 
+  if (droppedCores.length > 0) {
+    console.log(`Ignored ${droppedCores.length} classifications naming removed nodes`);
+    console.log("");
+  }
+  const unmatchedOverrides = Object.keys(overrides).filter((core) => !seenCandidates.has(core));
+  if (unmatchedOverrides.length > 0) {
+    console.log(`Overrides that matched no ingredient line (${unmatchedOverrides.length}):`);
+    for (const core of unmatchedOverrides) console.log(`  ${core}`);
+    console.log("");
+  }
   console.log(`Recipes read:              ${recipesRead}`);
   console.log(`Recipes skipped (no lines): ${recipesSkippedNoLines}`);
   console.log(`Recipes in output:         ${recipes.length}`);

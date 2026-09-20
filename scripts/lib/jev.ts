@@ -1,5 +1,7 @@
-// Jev (typesafe.ai) client construction, question builders, and answer
-// parsing for scripts/classify.ts. Keeps classify.ts a thin driver.
+// Everything scripts/classify.ts needs from Jev (typesafe.ai) that is not
+// orchestration: the client, the two questions, the response cache and its
+// validation against the current taxonomy, the per-item routing decision,
+// and turning responses into committed classification records.
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
@@ -12,6 +14,7 @@ import {
   type PreprocessedItem,
   type OverrideClassification,
   type JevClassification,
+  type ClassificationItem,
 } from "./data-files.js";
 
 export const MODEL = "jev-latest";
@@ -105,27 +108,106 @@ export interface CachedResponse {
   request2: SystemOneResult<NodeQuestions> | null;
 }
 
-/** A cache key stable across reruns, tied to the taxonomy (version and
- * structure) and prompt version. The structure hash invalidates the cache
- * when nodes, parents, or categories change; it deliberately ignores names
- * and aliases, so an alias edit does not invalidate the cache. */
+/** A cache key stable across reruns, tied to the taxonomy version and
+ * prompt version. It deliberately ignores tree shape: adding or removing a
+ * node no longer invalidates the whole cache. A cached response that names
+ * a node the current tree lacks is instead caught on read, by
+ * `unknownIdsIn`. */
 function cacheKeyFor(core: string, taxonomy: Taxonomy): string {
-  return crypto.createHash("sha1").update(`${core}|${taxonomy.version}|${PROMPT_VERSION}|${taxonomy.structureHash}`).digest("hex");
+  return crypto.createHash("sha1").update(`${core}|${taxonomy.version}|${PROMPT_VERSION}`).digest("hex");
 }
 
 function cachePathFor(core: string, taxonomy: Taxonomy): string {
   return path.join(JEV_CACHE_DIR, `${cacheKeyFor(core, taxonomy)}.json`);
 }
 
-/** The cached Jev response for `core`, or null when nothing is cached. */
-export function readJevCache(core: string, taxonomy: Taxonomy): CachedResponse | null {
+/**
+ * Node ids a cached response names that make it unusable: ids the taxonomy
+ * no longer has, and node-question candidates that have since moved out of
+ * the answered family (the item was scored against an option set the tree
+ * no longer has). Empty means the response is usable. A new node the cached
+ * response simply did not have as an option is NOT stale: that additive
+ * drift is accepted, which is the whole point of dropping the structure hash
+ * from the cache key. "none" is a sentinel, never a real node id, so it is
+ * never reported.
+ */
+export function unknownIdsIn(response: CachedResponse, taxonomy: Taxonomy): string[] {
+  const unknown = new Set<string>();
+
+  function check(id: string): void {
+    if (id !== NONE && !taxonomy.nodes.has(id)) unknown.add(id);
+  }
+
+  const rootAnswer = response.request1.answers.root;
+  for (const id of Object.keys(rootAnswer.probabilities)) check(id);
+  check(rootAnswer.choice);
+
+  if (response.request2) {
+    const nodeAnswer = response.request2.answers.node;
+    const candidates = [...Object.keys(nodeAnswer.probabilities), nodeAnswer.choice];
+    for (const id of candidates) check(id);
+    const root = rootAnswer.choice;
+    if (root !== NONE && taxonomy.nodes.has(root)) {
+      for (const id of candidates) {
+        if (id !== NONE && taxonomy.nodes.has(id) && taxonomy.rootOf(id) !== root) unknown.add(id);
+      }
+    }
+  }
+
+  return [...unknown];
+}
+
+export type CacheRead =
+  | { status: "hit"; response: CachedResponse }
+  | { status: "stale"; unknownIds: string[] }
+  | { status: "miss" };
+
+/** Reads the cached Jev response for `core`, validating it against the
+ * current taxonomy. "stale" means the response names node ids the taxonomy
+ * no longer has (see `unknownIdsIn`); the caller should re-ask rather than
+ * rebuild from it. */
+export function readJevCache(core: string, taxonomy: Taxonomy): CacheRead {
   const cachePath = cachePathFor(core, taxonomy);
-  if (!fs.existsSync(cachePath)) return null;
-  return JSON.parse(fs.readFileSync(cachePath, "utf8")) as CachedResponse;
+  if (!fs.existsSync(cachePath)) return { status: "miss" };
+  const response = JSON.parse(fs.readFileSync(cachePath, "utf8")) as CachedResponse;
+  const unknownIds = unknownIdsIn(response, taxonomy);
+  if (unknownIds.length > 0) return { status: "stale", unknownIds };
+  return { status: "hit", response };
 }
 
 export function writeJevCache(core: string, taxonomy: Taxonomy, response: CachedResponse): void {
   writeJson(cachePathFor(core, taxonomy), response);
+}
+
+export type Decision =
+  | { kind: "override" }
+  | { kind: "rebuild"; cached: CachedResponse }
+  | { kind: "keep"; prior: ClassificationItem }
+  | { kind: "ask"; reason: "refresh" | "stale" | "miss"; unknownIds: string[] };
+
+/** What to do with one selected item. Rules, in order: an override never
+ * reaches the API; --refresh always asks; a cache hit rebuilds; a stale
+ * cache entry asks even when a prior exists (the prior came from the same
+ * response); a cache miss keeps a prior unless it is an error record
+ * (nothing was learned) or an override record (the override that produced
+ * it is gone, or `overridden` would be true); otherwise ask. */
+export function decide(input: {
+  overridden: boolean;
+  refresh: boolean;
+  readCache: () => CacheRead;
+  prior: ClassificationItem | undefined;
+}): Decision {
+  if (input.overridden) return { kind: "override" };
+  if (input.refresh) return { kind: "ask", reason: "refresh", unknownIds: [] };
+
+  const cacheRead = input.readCache();
+  if (cacheRead.status === "hit") return { kind: "rebuild", cached: cacheRead.response };
+  if (cacheRead.status === "stale") return { kind: "ask", reason: "stale", unknownIds: cacheRead.unknownIds };
+
+  if (input.prior && input.prior.status !== "error" && input.prior.status !== "override") {
+    return { kind: "keep", prior: input.prior };
+  }
+  return { kind: "ask", reason: "miss", unknownIds: [] };
 }
 
 function top3(probabilities: Record<string, number>): Record<string, number> {
@@ -200,7 +282,7 @@ function deriveStatus(
   nodeConfidence: number | null,
 ): { status: JevClassification["status"]; node: string | null } {
   let status: JevClassification["status"];
-  if (root === NONE || node === null || node === NONE) {
+  if (root === NONE || node === null) {
     status = "none";
   } else if (nodeConfidence !== null && nodeConfidence >= CONFIDENCE_THRESHOLD) {
     status = "accepted";
@@ -235,7 +317,7 @@ export function buildRecord(item: PreprocessedItem, cached: CachedResponse, taxo
     rawNodeChoice = nodeAnswer.choice;
     nodeProbabilities = nodeAnswer.probabilities;
     const result = collapseNode(taxonomy, rawNodeChoice, nodeAnswer.probabilities);
-    node = result.node;
+    node = result.node === NONE ? null : result.node;
     nodeConfidence = result.nodeConfidence;
     collapsed = result.collapsed;
     nodeTop3 = top3(nodeAnswer.probabilities);

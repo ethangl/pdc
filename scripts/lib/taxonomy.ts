@@ -2,7 +2,6 @@
 // tree. See curated/taxonomy.json's `notes` field for the semantics of
 // categories, aliases, and staples.
 
-import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import { TAXONOMY_PATH } from "./paths.js";
 
@@ -26,11 +25,6 @@ interface RawTaxonomyFile {
 
 export interface Taxonomy {
   version: number;
-  /** sha1 over the sorted `id|parent|kind` of every node. Depends only on
-   * the tree's shape (ids, parents, categories), not names or aliases, so an
-   * alias edit does not invalidate anything keyed on this hash (the Jev
-   * cache; see jev.ts). */
-  structureHash: string;
   nodes: Map<string, TaxonomyNode>;
   roots: string[];
   /** The node for `id`. Throws when `id` is not in the taxonomy. */
@@ -324,19 +318,8 @@ export function taxonomyFromRaw(raw: unknown): Taxonomy {
     return ancestors.length > 0 ? ancestors[ancestors.length - 1]! : id;
   }
 
-  const structureHash = crypto
-    .createHash("sha1")
-    .update(
-      [...nodes.values()]
-        .map((n) => `${n.id}|${n.parent ?? ""}|${n.kind ?? ""}`)
-        .sort()
-        .join("\n"),
-    )
-    .digest("hex");
-
   return {
     version: file.version,
-    structureHash,
     nodes,
     roots,
     node,
