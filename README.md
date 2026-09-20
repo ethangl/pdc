@@ -10,6 +10,10 @@ Design and decisions are in `docs/DESIGN.md`.
 - `pnpm install` — install dependencies.
 - `pnpm typecheck` — type-check the scripts.
 - `pnpm test` — run the preprocessing and line-resolution test cases.
+- `pnpm crawl` — add recipes that are missing from the raw cache. Discovers
+  new slugs from the Algolia index (needs `ALGOLIA_APP_ID` and
+  `ALGOLIA_API_KEY` in `.env.local`), or from the recipe sitemaps with
+  `--sitemap`. Flags: `--limit N`, `--dry-run`. Run the curation loop after.
 - `pnpm extract` — read the cached recipes and write
   `data/ingredients-raw.json` and `data/ingredients-preprocessed.json`.
 - `pnpm taxonomy:check` — validate `curated/taxonomy.json` and print the tree.

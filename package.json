@@ -12,7 +12,8 @@
     "taxonomy:check": "tsx scripts/taxonomy-check.ts",
     "coverage": "tsx scripts/coverage.ts",
     "classify": "tsx scripts/classify.ts",
-    "mapping": "tsx scripts/build-mapping.ts"
+    "mapping": "tsx scripts/build-mapping.ts",
+    "crawl": "tsx scripts/crawl-punch.ts"
   },
   "dependencies": {
     "@typesafe-ai/sdk": "^0.6.0"
