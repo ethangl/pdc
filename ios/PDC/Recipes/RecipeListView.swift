@@ -30,7 +30,7 @@ struct RecipeListView: View {
                 ForEach(sections, id: \.bucket) { section in
                     Section {
                         ForEach(section.results) { result in
-                            NavigationLink(value: result) {
+                            NavigationLink(value: result.recipe) {
                                 RecipeRow(result: result)
                             }
                         }
@@ -41,23 +41,19 @@ struct RecipeListView: View {
             }
             .navigationTitle("Recipes")
             .searchable(text: $searchText)
-            .navigationDestination(for: RecipeResult.self) { result in
-                RecipeDetailView(result: result)
+            .navigationDestination(for: Recipe.self) { recipe in
+                RecipeDetailView(recipe: recipe)
             }
         }
     }
 
-    private var stockedIds: Set<String> {
-        Set(stocked.map(\.nodeId))
-    }
-
     /// True until the user stocks anything beyond the seeded staples.
     private var showsFirstLaunchHint: Bool {
-        !stockedIds.contains { !catalog.stapleIds.contains($0) }
+        stocked.nodeIds.isSubset(of: catalog.stapleIds)
     }
 
     private var rankedResults: [RecipeResult] {
-        let inventory = Inventory(catalog: catalog, stocked: stockedIds)
+        let inventory = Inventory(catalog: catalog, stocked: stocked.nodeIds)
         return Matcher.evaluate(catalog, inventory: inventory).ranked()
     }
 

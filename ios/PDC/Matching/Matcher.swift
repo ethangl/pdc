@@ -9,13 +9,11 @@ import Foundation
 /// satisfied when any of its `nodes` is in this set, which is O(1) per
 /// requirement after the O(stocked x depth) build.
 struct Inventory: Sendable {
-    let stocked: Set<String>
     /// Satisfied node id -> the stocked node that satisfies it (itself for
     /// a directly stocked node, otherwise the descendant that provides it).
     private let providedBy: [String: String]
 
     init(catalog: Catalog, stocked: Set<String>) {
-        self.stocked = stocked
         var providedBy: [String: String] = [:]
         for node in stocked.sorted() {
             providedBy[node] = providedBy[node] ?? node
@@ -38,12 +36,12 @@ struct Inventory: Sendable {
     }
 }
 
-enum RequirementStatus: Sendable, Hashable {
+enum RequirementStatus: Sendable, Equatable {
     case stocked(by: String)
     case missing
 }
 
-struct RequirementResult: Sendable, Hashable {
+struct RequirementResult: Sendable, Equatable {
     let requirement: Requirement
     let status: RequirementStatus
 }
@@ -52,7 +50,7 @@ struct RequirementResult: Sendable, Hashable {
 /// exactly: `requires` entries with no satisfied node, plus unresolved
 /// lines, counted in both, and the house-made subset of the former also
 /// counted in `unmetHouseMade`. `optional` is not evaluated here.
-struct RecipeResult: Sendable, Identifiable, Hashable {
+struct RecipeResult: Sendable, Identifiable, Equatable {
     let recipe: Recipe
     let requirements: [RequirementResult]
     let unmet: Int
@@ -66,7 +64,7 @@ enum Matcher {
     /// just maps over it. RecipeDetailView calls this directly to
     /// re-evaluate a single recipe without re-running the whole catalog.
     static func evaluate(_ recipe: Recipe, inventory: Inventory) -> RecipeResult {
-        let unresolvedCount = recipe.unresolved?.count ?? 0
+        let unresolvedCount = recipe.unresolved.count
         var unmet = unresolvedCount
         var unmetHouseMade = unresolvedCount
 

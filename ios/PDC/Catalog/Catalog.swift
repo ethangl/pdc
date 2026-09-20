@@ -1,6 +1,7 @@
 // Decodes the two bundled data files once and holds them for the app's
-// lifetime. Immutable after load. See docs/APP.md "Architecture": the
-// matching rule itself (`satisfies`) lives in Phase 2's Matcher, not here.
+// lifetime: the recipes, the node table, the staple ids, and the browse
+// sections for the Inventory screen. Immutable after load. See
+// docs/APP.md "Architecture".
 
 import Foundation
 
@@ -19,26 +20,57 @@ enum CatalogError: Error, CustomStringConvertible {
 }
 
 struct Catalog: Sendable {
+    /// One browse category: a root node and its whole subtree, for the
+    /// Inventory screen. See docs/APP.md "Inventory".
+    struct BrowseSection: Identifiable, Sendable {
+        let root: TaxonomyNode
+        /// The root and every descendant, sorted by name.
+        let nodes: [TaxonomyNode]
+        var id: String { root.id }
+    }
+
     let recipes: [Recipe]
     let nodesById: [String: TaxonomyNode]
     let taxonomyVersion: Int
     let stapleIds: Set<String>
-    /// Node id -> its children's ids. Derived once here, from `nodesById`,
-    /// so `descendants(of:)` can walk it instead of rescanning every node.
-    private let childrenByParent: [String: [String]]
+    /// Roots sorted by name, each with its subtree. Computed once here.
+    let browseSections: [BrowseSection]
 
-    init(recipes: [Recipe], nodesById: [String: TaxonomyNode], taxonomyVersion: Int, stapleIds: Set<String>) {
+    init(recipes: [Recipe], nodes: [TaxonomyNode], taxonomyVersion: Int) {
         self.recipes = recipes
-        self.nodesById = nodesById
         self.taxonomyVersion = taxonomyVersion
-        self.stapleIds = stapleIds
 
+        var nodesById: [String: TaxonomyNode] = [:]
+        nodesById.reserveCapacity(nodes.count)
         var childrenByParent: [String: [String]] = [:]
-        for node in nodesById.values {
-            guard let parent = node.parent else { continue }
-            childrenByParent[parent, default: []].append(node.id)
+        for node in nodes {
+            nodesById[node.id] = node
+            if let parent = node.parent {
+                childrenByParent[parent, default: []].append(node.id)
+            }
         }
-        self.childrenByParent = childrenByParent
+        self.nodesById = nodesById
+        self.stapleIds = Set(nodes.filter(\.staple).map(\.id))
+
+        func subtree(of id: String) -> [String] {
+            var result: [String] = [id]
+            var stack = childrenByParent[id, default: []]
+            while let nextId = stack.popLast() {
+                result.append(nextId)
+                stack.append(contentsOf: childrenByParent[nextId, default: []])
+            }
+            return result
+        }
+
+        self.browseSections = nodes
+            .filter { $0.parent == nil }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            .map { root in
+                let sectionNodes = subtree(of: root.id)
+                    .compactMap { nodesById[$0] }
+                    .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                return BrowseSection(root: root, nodes: sectionNodes)
+            }
     }
 
     static func load(from bundle: Bundle) throws -> Catalog {
@@ -60,18 +92,10 @@ struct Catalog: Sendable {
             )
         }
 
-        var nodesById: [String: TaxonomyNode] = [:]
-        nodesById.reserveCapacity(taxonomyFile.nodes.count)
-        for node in taxonomyFile.nodes {
-            nodesById[node.id] = node
-        }
-        let stapleIds = Set(taxonomyFile.nodes.filter { $0.staple == true }.map(\.id))
-
         return Catalog(
             recipes: recipesFile.recipes,
-            nodesById: nodesById,
-            taxonomyVersion: taxonomyFile.version,
-            stapleIds: stapleIds
+            nodes: taxonomyFile.nodes,
+            taxonomyVersion: taxonomyFile.version
         )
     }
 
@@ -91,23 +115,8 @@ struct Catalog: Sendable {
         return result
     }
 
-    /// Every node with no parent (the browse categories), sorted by name.
-    var roots: [TaxonomyNode] {
-        nodesById.values
-            .filter { $0.parent == nil }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-    }
-
-    /// Every descendant of `id` at any depth, not including `id` itself.
-    /// Order is not significant. Used by the Inventory screen to list a
-    /// root's subtree; see docs/APP.md "Inventory".
-    func descendants(of id: String) -> [String] {
-        var result: [String] = []
-        var stack = childrenByParent[id] ?? []
-        while let nextId = stack.popLast() {
-            result.append(nextId)
-            stack.append(contentsOf: childrenByParent[nextId] ?? [])
-        }
-        return result
+    /// The node's name, or the id itself when the node is unknown.
+    func name(of nodeId: String) -> String {
+        nodesById[nodeId]?.name ?? nodeId
     }
 }

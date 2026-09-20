@@ -15,6 +15,13 @@ final class StockedNode {
     }
 }
 
+extension Array where Element == StockedNode {
+    /// The stocked node ids, as a set for O(1) membership checks.
+    var nodeIds: Set<String> {
+        Set(map(\.nodeId))
+    }
+}
+
 /// Mutates the inventory. Views read `@Query` for the current rows; this
 /// enum only writes.
 @MainActor

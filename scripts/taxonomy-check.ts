@@ -15,15 +15,14 @@ function main(): void {
   }
 
   let categoryCount = 0;
-  let stapleCount = 0;
   let maxDepth = 0;
 
-  for (const [id, node] of taxonomy.nodes) {
+  for (const [id] of taxonomy.nodes) {
     if (taxonomy.isCategory(id)) categoryCount++;
-    if (node.staple) stapleCount++;
     const depth = taxonomy.ancestorsOf(id).length;
     if (depth > maxDepth) maxDepth = depth;
   }
+  const stapleCount = taxonomy.stapleIds().length;
 
   console.log(`Nodes: ${taxonomy.nodes.size}`);
   console.log(`Categories: ${categoryCount}`);

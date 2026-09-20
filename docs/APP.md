@@ -136,7 +136,8 @@ No favorites, notes, ratings, or sharing in the first version.
 ## Architecture
 
 - `Catalog`: decodes both files once at launch and holds the recipes, the
-  node table, and a parent map. Immutable after load.
+  node table, and the browse sections (root categories with their
+  subtrees) for the Inventory screen. Immutable after load.
 - `Matcher`: a pure function from (`Catalog`, stocked node id set) to a
   per-recipe result (`unmet`, `unmetHouseMade`, per-requirement state).
   No SwiftUI, no SwiftData. This is where the unit tests go.
@@ -151,7 +152,7 @@ No favorites, notes, ratings, or sharing in the first version.
 - Unit tests for `Matcher`: alternatives, descendant matching, a category
   node stocked, substitutes, unresolved lines, staples only.
 - A cross-check against the pipeline: a TypeScript reference,
-  `scripts/makeability.ts`, computes the same per-recipe `unmet` for a
+  `scripts/lib/makeability.ts`, computes the same per-recipe `unmet` for a
   given stocked set, and a test fixture with the expected counts for
   "staples only" is committed under `ios/PDCTests/`. The Swift matcher must
   reproduce it exactly. This catches a matching-rule drift between the

@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computeMakeability, stapleIds } from "./lib/makeability.js";
+import { computeMakeability } from "./lib/makeability.js";
 import type { RecipesFile, Requirement } from "./lib/mapping.js";
 import { taxonomyFromRaw, type TaxonomyNode } from "./lib/taxonomy.js";
 
@@ -144,5 +144,5 @@ test("results preserve the recipes' order", () => {
 });
 
 test("stapleIds returns every node with staple: true", () => {
-  assert.deepEqual(stapleIds(TAXONOMY).sort(), ["salt", "simple-syrup"]);
+  assert.deepEqual(TAXONOMY.stapleIds().sort(), ["salt", "simple-syrup"]);
 });

@@ -30,7 +30,7 @@ struct PDCApp: App {
 }
 
 private struct CatalogKey: EnvironmentKey {
-    static let defaultValue = Catalog(recipes: [], nodesById: [:], taxonomyVersion: 0, stapleIds: [])
+    static let defaultValue = Catalog(recipes: [], nodes: [], taxonomyVersion: 0)
 }
 
 extension EnvironmentValues {

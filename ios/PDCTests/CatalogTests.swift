@@ -27,7 +27,7 @@ struct CatalogTests {
     }
 
     @Test func hasAtLeastOneUnresolvedRecipe() {
-        #expect(Self.catalog.recipes.contains { ($0.unresolved?.isEmpty == false) })
+        #expect(Self.catalog.recipes.contains { !$0.unresolved.isEmpty })
     }
 
     @Test func ancestors() {
@@ -36,14 +36,25 @@ struct CatalogTests {
         #expect(Self.catalog.ancestors(of: "not-a-real-node") == [])
     }
 
-    @Test func rootsHaveNoParentAndMatchTheDocumentedCount() {
-        #expect(Self.catalog.roots.count == 21)
-        #expect(Self.catalog.roots.allSatisfy { $0.parent == nil })
+    @Test func browseSectionCountMatchesTheDocumentedRootCount() {
+        #expect(Self.catalog.browseSections.count == 21)
     }
 
-    @Test func descendantsOfWhiskeyIncludesBourbonButNotItself() {
-        let descendants = Self.catalog.descendants(of: "whiskey")
-        #expect(descendants.contains("bourbon"))
-        #expect(!descendants.contains("whiskey"))
+    @Test func everySectionRootHasNoParent() {
+        #expect(Self.catalog.browseSections.allSatisfy { $0.root.parent == nil })
+    }
+
+    @Test func whiskeySectionIncludesBourbonAndWhiskeyItself() {
+        let whiskey = Self.catalog.browseSections.first { $0.root.id == "whiskey" }
+        let ids = whiskey?.nodes.map(\.id) ?? []
+        #expect(ids.contains("whiskey"))
+        #expect(ids.contains("bourbon"))
+    }
+
+    @Test func everySectionsNodesAreSortedByName() {
+        for section in Self.catalog.browseSections {
+            let names = section.nodes.map(\.name)
+            #expect(names == names.sorted { $0.localizedStandardCompare($1) == .orderedAscending })
+        }
     }
 }

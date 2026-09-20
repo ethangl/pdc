@@ -25,7 +25,7 @@ struct RecipeRow: View {
         var parts = result.requirements
             .filter { $0.status == .missing }
             .map(\.requirement.raw)
-        parts.append(contentsOf: (result.recipe.unresolved ?? []).map(\.raw))
+        parts.append(contentsOf: result.recipe.unresolved.map(\.raw))
         return parts.joined(separator: ", ")
     }
 }

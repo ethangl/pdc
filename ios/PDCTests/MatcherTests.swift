@@ -19,38 +19,29 @@ private enum Synthetic {
     static func node(
         _ id: String,
         parent: String? = nil,
-        staple: Bool = false,
-        kind: String? = nil,
-        fallback: String? = nil
+        staple: Bool = false
     ) -> TaxonomyNode {
-        TaxonomyNode(id: id, name: id, parent: parent, aliases: nil, staple: staple ? true : nil, kind: kind, fallback: fallback)
+        TaxonomyNode(id: id, name: id, parent: parent, staple: staple)
     }
 
     static let nodes: [TaxonomyNode] = [
         node("gin"),
         node("london-dry-gin", parent: "gin"),
         node("old-tom-gin", parent: "gin"),
-        node("citrus", kind: "category"),
+        node("citrus"),
         node("lime-juice", parent: "citrus"),
         node("lemon-juice", parent: "citrus"),
-        node("syrup", kind: "category", fallback: "simple-syrup"),
+        node("syrup"),
         node("simple-syrup", parent: "syrup", staple: true),
         node("vanilla-syrup", parent: "syrup"),
         node("salt", staple: true),
     ]
 
     static func catalog(recipes: [Recipe]) -> Catalog {
-        var nodesById: [String: TaxonomyNode] = [:]
-        for node in nodes { nodesById[node.id] = node }
-        return Catalog(
-            recipes: recipes,
-            nodesById: nodesById,
-            taxonomyVersion: 0,
-            stapleIds: Set(nodes.filter { $0.staple == true }.map(\.id))
-        )
+        Catalog(recipes: recipes, nodes: nodes, taxonomyVersion: 0)
     }
 
-    static func requirement(_ nodes: [String], houseMade: Bool = false, substitute: Bool? = nil) -> Requirement {
+    static func requirement(_ nodes: [String], houseMade: Bool = false, substitute: Bool = false) -> Requirement {
         Requirement(nodes: nodes, houseMade: houseMade, raw: nodes.joined(separator: " or "), substitute: substitute)
     }
 
@@ -58,8 +49,8 @@ private enum Synthetic {
         slug: String,
         name: String? = nil,
         requires: [Requirement] = [],
-        optional: [Requirement]? = nil,
-        unresolved: [UnresolvedLine]? = nil
+        optional: [Requirement] = [],
+        unresolved: [UnresolvedLine] = []
     ) -> Recipe {
         Recipe(slug: slug, name: name ?? slug, url: "https://example.com/\(slug)", requires: requires, optional: optional, unresolved: unresolved)
     }

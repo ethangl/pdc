@@ -23,7 +23,8 @@ struct StockTests {
     }
 
     private func catalog(stapleIds: Set<String>) -> Catalog {
-        Catalog(recipes: [], nodesById: [:], taxonomyVersion: 0, stapleIds: stapleIds)
+        let nodes = stapleIds.map { TaxonomyNode(id: $0, name: $0, staple: true) }
+        return Catalog(recipes: [], nodes: nodes, taxonomyVersion: 0)
     }
 
     @Test func seedingTwiceYields15Rows() throws {

@@ -1,13 +1,12 @@
-// The recipe detail screen. See docs/APP.md "Screens". Takes the
-// RecipeResult from the list so it does not re-evaluate the whole catalog,
-// but recomputes this one recipe's requirement results from the current
-// inventory so stocking from this screen updates its own rows.
+// The recipe detail screen. See docs/APP.md "Screens". Evaluates this one
+// recipe against the current inventory, so stocking from this screen
+// updates its rows without re-running the whole catalog.
 
 import SwiftUI
 import SwiftData
 
 struct RecipeDetailView: View {
-    let result: RecipeResult
+    let recipe: Recipe
 
     @Environment(\.catalog) private var catalog
     @Environment(\.modelContext) private var modelContext
@@ -17,7 +16,7 @@ struct RecipeDetailView: View {
     var body: some View {
         List {
             Section {
-                Text(result.recipe.name)
+                Text(recipe.name)
                     .font(.title2.bold())
 
                 Button {
@@ -37,9 +36,9 @@ struct RecipeDetailView: View {
                 }
             }
 
-            if let unresolved = result.recipe.unresolved, !unresolved.isEmpty {
+            if !recipe.unresolved.isEmpty {
                 Section("Not in the ingredient list") {
-                    ForEach(Array(unresolved.enumerated()), id: \.offset) { _, line in
+                    ForEach(Array(recipe.unresolved.enumerated()), id: \.offset) { _, line in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(line.raw)
                             Text("See the recipe page")
@@ -50,18 +49,18 @@ struct RecipeDetailView: View {
                 }
             }
 
-            if let optional = result.recipe.optional, !optional.isEmpty {
+            if !recipe.optional.isEmpty {
                 Section("Optional") {
-                    ForEach(Array(optional.enumerated()), id: \.offset) { _, requirement in
+                    ForEach(Array(recipe.optional.enumerated()), id: \.offset) { _, requirement in
                         Text(requirement.raw)
                     }
                 }
             }
         }
-        .navigationTitle(result.recipe.name)
+        .navigationTitle(recipe.name)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $isShowingSafari) {
-            if let url = URL(string: result.recipe.url) {
+            if let url = URL(string: recipe.url) {
                 SafariView(url: url)
             }
         }
@@ -72,8 +71,8 @@ struct RecipeDetailView: View {
     /// Delegates to Matcher's single-recipe evaluate, the one copy of the
     /// matching rule, rather than re-running it over the whole catalog.
     private var requirementResults: [RequirementResult] {
-        let inventory = Inventory(catalog: catalog, stocked: Set(stocked.map(\.nodeId)))
-        return Matcher.evaluate(result.recipe, inventory: inventory).requirements
+        let inventory = Inventory(catalog: catalog, stocked: stocked.nodeIds)
+        return Matcher.evaluate(recipe, inventory: inventory).requirements
     }
 
     @ViewBuilder
@@ -82,7 +81,7 @@ struct RecipeDetailView: View {
         case .stocked(let providerId):
             VStack(alignment: .leading, spacing: 2) {
                 Text(requirementResult.requirement.raw)
-                Text("Have: \(nodeName(providerId))")
+                Text("Have: \(catalog.name(of: providerId))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -110,7 +109,7 @@ struct RecipeDetailView: View {
         } else {
             Menu {
                 ForEach(requirement.nodes, id: \.self) { nodeId in
-                    Button(nodeName(nodeId)) {
+                    Button(catalog.name(of: nodeId)) {
                         Stock.toggle(nodeId, in: modelContext)
                     }
                 }
@@ -123,13 +122,9 @@ struct RecipeDetailView: View {
     private func missingSubtitle(_ requirement: Requirement) -> String {
         var parts = ["Missing"]
         if requirement.houseMade { parts.append("house-made") }
-        if requirement.substitute == true, let first = requirement.nodes.first {
-            parts.append("any \(nodeName(first)) works")
+        if requirement.substitute, let first = requirement.nodes.first {
+            parts.append("any \(catalog.name(of: first)) works")
         }
         return parts.joined(separator: " · ")
-    }
-
-    private func nodeName(_ nodeId: String) -> String {
-        catalog.nodesById[nodeId]?.name ?? nodeId
     }
 }

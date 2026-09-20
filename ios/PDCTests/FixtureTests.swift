@@ -2,8 +2,7 @@
 // computes the same per-recipe unmet/unmetHouseMade for the "staples only"
 // stocked set, and this must reproduce it exactly. See docs/APP.md
 // "Testing". Loads the real Catalog from Bundle.main (the test host) and
-// the fixture from the test bundle, where it lands at the bundle root, as
-// found in Phase 1.
+// the fixture from the test bundle, where it lands at the bundle root.
 
 import Testing
 import Foundation

@@ -49,12 +49,3 @@ export function computeMakeability(
     return { slug: recipe.slug, unmet, unmetHouseMade };
   });
 }
-
-/** Ids of every node with `staple: true`. */
-export function stapleIds(taxonomy: Taxonomy): string[] {
-  const ids: string[] = [];
-  for (const [id, node] of taxonomy.nodes) {
-    if (node.staple) ids.push(id);
-  }
-  return ids;
-}
