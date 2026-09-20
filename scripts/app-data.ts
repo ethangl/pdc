@@ -46,9 +46,15 @@ function main(): void {
   }
 
   const recipes: RecipesFile = JSON.parse(fs.readFileSync(RECIPES_PATH, "utf8"));
-  writeAndReport(APP_RECIPES_PATH, JSON.stringify(recipes));
-
   const taxonomy = loadTaxonomy();
+  if (recipes.taxonomyVersion !== taxonomy.version) {
+    console.error(
+      `${RECIPES_PATH} was built against taxonomy version ${recipes.taxonomyVersion}, but the taxonomy is version ${taxonomy.version}. Run pnpm mapping first.`,
+    );
+    process.exit(1);
+  }
+
+  writeAndReport(APP_RECIPES_PATH, JSON.stringify(recipes));
   writeAndReport(APP_TAXONOMY_PATH, JSON.stringify(JSON.parse(fs.readFileSync(TAXONOMY_PATH, "utf8"))));
 
   const stocked = taxonomy.stapleIds().sort();

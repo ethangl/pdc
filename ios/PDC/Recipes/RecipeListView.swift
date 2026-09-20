@@ -1,7 +1,8 @@
 // The Recipes tab: the ranked, sectioned list. See docs/APP.md "Screens"
-// and "Makeability and ranking". The ranking is recomputed in `body` on
-// every inventory change; FixtureTests bounds the full cost. No caching
-// here per docs/APP.md "Architecture".
+// and "Makeability and ranking". The ranking is recomputed when the stocked
+// set changes and held in state, so typing in the search field filters the
+// held list instead of re-evaluating the catalog on every keystroke.
+// FixtureTests bounds the cost of one recomputation.
 
 import SwiftUI
 import SwiftData
@@ -11,6 +12,7 @@ struct RecipeListView: View {
     @Query private var stocked: [StockedNode]
     @Binding var selectedTab: ContentView.AppTab
     @State private var searchText = ""
+    @State private var rankedResults: [RecipeResult] = []
 
     var body: some View {
         NavigationStack {
@@ -45,16 +47,15 @@ struct RecipeListView: View {
                 RecipeDetailView(recipe: recipe)
             }
         }
+        .onChange(of: stocked.nodeIds, initial: true) { _, stockedIds in
+            let inventory = Inventory(catalog: catalog, stocked: stockedIds)
+            rankedResults = Matcher.evaluate(catalog, inventory: inventory).ranked()
+        }
     }
 
     /// True until the user stocks anything beyond the seeded staples.
     private var showsFirstLaunchHint: Bool {
         stocked.nodeIds.isSubset(of: catalog.stapleIds)
-    }
-
-    private var rankedResults: [RecipeResult] {
-        let inventory = Inventory(catalog: catalog, stocked: stocked.nodeIds)
-        return Matcher.evaluate(catalog, inventory: inventory).ranked()
     }
 
     private var filteredResults: [RecipeResult] {

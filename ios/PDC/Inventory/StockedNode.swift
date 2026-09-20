@@ -30,10 +30,18 @@ enum Stock {
     /// this enum since tests inject their own `UserDefaults` instance.
     private static let didSeedStaplesKey = "didSeedStaples"
 
-    /// Stocks `nodeId` if it isn't stocked, unstocks it if it is.
+    /// Stocks `nodeId` if it isn't stocked, unstocks it if it is. A failed
+    /// fetch changes nothing: inserting on a failed fetch could re-stock a
+    /// node the user meant to unstock.
     static func toggle(_ nodeId: String, in context: ModelContext) {
         let descriptor = FetchDescriptor<StockedNode>(predicate: #Predicate { $0.nodeId == nodeId })
-        if let existing = try? context.fetch(descriptor).first {
+        let existing: StockedNode?
+        do {
+            existing = try context.fetch(descriptor).first
+        } catch {
+            return
+        }
+        if let existing {
             context.delete(existing)
         } else {
             context.insert(StockedNode(nodeId: nodeId))
@@ -42,12 +50,16 @@ enum Stock {
 
     /// Stocks every staple, once per install. After that the user owns the
     /// list, so this never runs again even if every staple gets unstocked.
+    /// The flag is set only after the rows are saved, so a kill before the
+    /// save leaves the flag unset and the next launch seeds again; the
+    /// unique `nodeId` makes that a no-op for rows that did land.
     /// `defaults` is injectable so tests don't share process-global state.
     static func seedStaplesIfNeeded(catalog: Catalog, context: ModelContext, defaults: UserDefaults = .standard) {
         guard !defaults.bool(forKey: didSeedStaplesKey) else { return }
         for nodeId in catalog.stapleIds {
             context.insert(StockedNode(nodeId: nodeId))
         }
+        guard (try? context.save()) != nil else { return }
         defaults.set(true, forKey: didSeedStaplesKey)
     }
 }

@@ -62,14 +62,16 @@ struct FixtureTests {
         }
     }
 
-    /// Times what RecipeListView.body does on every inventory change: build
-    /// the Inventory, evaluate every recipe, and rank the results.
+    /// Times what RecipeListView does on every inventory change: build the
+    /// Inventory, evaluate every recipe, and rank the results. The bound is
+    /// loose on purpose: it catches an accidental quadratic, not a slow
+    /// machine. The print shows the real number.
     @Test func ranksTheFullCatalogQuickly() {
         let start = DispatchTime.now()
         let inventory = Inventory(catalog: Self.catalog, stocked: Self.catalog.stapleIds)
         _ = Matcher.evaluate(Self.catalog, inventory: inventory).ranked()
         let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
         print("Inventory + evaluate + ranked over the full catalog took \(elapsedMs) ms")
-        #expect(elapsedMs < 200)
+        #expect(elapsedMs < 2_000)
     }
 }

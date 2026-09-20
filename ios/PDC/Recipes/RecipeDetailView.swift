@@ -90,12 +90,15 @@ struct RecipeDetailView: View {
 
     @ViewBuilder
     private func missingRow(_ requirement: Requirement) -> some View {
+        // Fill the row so the whole row is tappable, not only the text.
         let label = VStack(alignment: .leading, spacing: 2) {
             Text(requirement.raw)
             Text(missingSubtitle(requirement))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
 
         if requirement.nodes.count == 1 {
             Button {
