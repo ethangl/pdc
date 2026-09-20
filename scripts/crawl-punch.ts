@@ -17,7 +17,6 @@
 import { parseArgs } from "node:util";
 import { loadLocalEnv } from "./lib/env.js";
 import { parsePositiveInt, stripPnpmSeparator } from "./lib/cli.js";
-import { RAW_CACHE_DIR } from "./lib/paths.js";
 import { cachedSlugs, ingredientLines, writeCachedRecipe, type PunchdrinkDataLayer } from "./lib/punchdrink-cache.js";
 import {
   extractDataLayer,
@@ -91,29 +90,21 @@ interface FetchOutcome {
   blocked: boolean;
 }
 
-/** Fetches, parses, and caches one recipe. Logs and reports "failed" for any
- * error except `FetchBlockedError`, which propagates so the caller can stop
- * the whole run. */
-async function fetchOne(recipe: DiscoveredRecipe): Promise<"saved" | "failed"> {
+/** Fetches, parses, gates on ingredients, and caches one recipe. Throws on
+ * any failure (a fetch error, `FetchBlockedError`, or no ingredient lines);
+ * the caller classifies the error. */
+async function fetchOne(recipe: DiscoveredRecipe): Promise<void> {
   const { url, slug } = recipe;
-  try {
-    const html = await fetchRecipePage(url);
-    const dataLayer = extractDataLayer(html);
-    const recipeName = recipeNameFromHtml(html);
-    const record: PunchdrinkDataLayer = { ...dataLayer, recipeName };
+  const html = await fetchRecipePage(url);
+  const dataLayer = extractDataLayer(html);
+  const recipeName = recipeNameFromHtml(html);
+  const record: PunchdrinkDataLayer = { ...dataLayer, recipeName };
 
-    if (ingredientLines({ slug, sourceUrl: url, dataLayer: record }).length === 0) {
-      console.error(`  ${slug}: no ingredients, skipping`);
-      return "failed";
-    }
-
-    writeCachedRecipe(slug, record, RAW_CACHE_DIR);
-    return "saved";
-  } catch (err) {
-    if (err instanceof FetchBlockedError) throw err;
-    console.error(`  ${slug}: ${err instanceof Error ? err.message : String(err)}`);
-    return "failed";
+  if (ingredientLines({ slug, sourceUrl: url, dataLayer: record }).length === 0) {
+    throw new Error("no ingredients");
   }
+
+  writeCachedRecipe(slug, record);
 }
 
 async function fetchAndSave(recipes: DiscoveredRecipe[]): Promise<FetchOutcome> {
@@ -121,18 +112,19 @@ async function fetchAndSave(recipes: DiscoveredRecipe[]): Promise<FetchOutcome> 
   let failed = 0;
 
   for (let i = 0; i < recipes.length; i++) {
-    console.log(`[${i + 1}/${recipes.length}] ${recipes[i].slug}`);
+    const { slug } = recipes[i];
+    console.log(`[${i + 1}/${recipes.length}] ${slug}`);
 
     try {
-      const outcome = await fetchOne(recipes[i]);
-      if (outcome === "saved") fetched++;
-      else failed++;
+      await fetchOne(recipes[i]);
+      fetched++;
     } catch (err) {
       if (err instanceof FetchBlockedError) {
         console.error(`Stopping: ${err.message}. The site is blocking this crawler; do not retry immediately.`);
         return { fetched, failed, blocked: true };
       }
-      throw err;
+      console.error(`  ${slug}: ${err instanceof Error ? err.message : String(err)}`);
+      failed++;
     }
 
     if (i < recipes.length - 1) await sleep(FETCH_INTERVAL_MS);
@@ -145,7 +137,7 @@ async function main(): Promise<void> {
   loadLocalEnv();
   const args = parseCliArgs(process.argv.slice(2));
 
-  const existing = new Set(cachedSlugs(RAW_CACHE_DIR));
+  const existing = new Set(cachedSlugs());
   console.log(`${existing.size} already cached\n`);
 
   const discovered = await discoverSlugs(existing, args);
