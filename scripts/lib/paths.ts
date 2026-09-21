@@ -21,3 +21,9 @@ export const REVIEW_DIR = "data/cache";
 export const INGREDIENTS_RAW_PATH = "data/ingredients-raw.json";
 export const INGREDIENTS_PREPROCESSED_PATH = "data/ingredients-preprocessed.json";
 export const RECIPES_PATH = "data/recipes.json";
+
+// --- ios/ (app resources, committed) ---
+
+export const APP_RECIPES_PATH = "ios/PDC/Resources/recipes.json";
+export const APP_TAXONOMY_PATH = "ios/PDC/Resources/taxonomy.json";
+export const APP_STAPLES_FIXTURE_PATH = "ios/PDCTests/Fixtures/staples-only.json";

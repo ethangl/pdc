@@ -41,6 +41,8 @@ export interface Taxonomy {
   fallbackFor(rootId: string): string | undefined;
   /** The topmost ancestor of `id`, or `id` itself when it has no parent. */
   rootOf(id: string): string;
+  /** Ids of every node with `staple: true`. */
+  stapleIds(): string[];
 }
 
 const ID_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -318,6 +320,10 @@ export function taxonomyFromRaw(raw: unknown): Taxonomy {
     return ancestors.length > 0 ? ancestors[ancestors.length - 1]! : id;
   }
 
+  function stapleIds(): string[] {
+    return nodeList.filter((node) => node.staple).map((node) => node.id);
+  }
+
   return {
     version: file.version,
     nodes,
@@ -330,6 +336,7 @@ export function taxonomyFromRaw(raw: unknown): Taxonomy {
     resolveAlias,
     fallbackFor,
     rootOf,
+    stapleIds,
   };
 }
 

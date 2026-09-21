@@ -53,7 +53,9 @@ bitters. The requirement carries `substitute: true` and the original text,
 so the app can say "make black tea syrup, recipe on the page" or "any
 aromatic bitters will do". The fallback target is declared on the root node
 in the tree (`fallback`). Other families have none; their unplaceable
-strings stay unresolved and block the recipe.
+strings stay unresolved. An unresolved line does not hide the recipe. The
+app treats it as a house-made requirement, shows its raw text, and ranks
+the recipe lower (decided 2026-09-20; see "App behavior settled").
 
 ### Matching
 
@@ -152,8 +154,7 @@ Generated, in `data/`, never committed:
   recipe: slug, name, punchdrink.com URL, `requires` (each a set of node ids
   where any one satisfies, with `houseMade` and `substitute` flags),
   `optional` (garnish, toppings, floats), and `unresolved` (lines nothing
-  could place). How the app obtains it (bundled at build or served by
-  Convex) is decided when the app exists.
+  could place). The first app version bundles it; see `docs/APP.md`.
 
 Resolution order for one ingredient line: preprocess, then override, then
 tree alias, then accepted classification. A line whose flags mark it
@@ -166,12 +167,18 @@ model from a written brief. Design notes live in `docs/`.
 
 ## App behavior settled
 
-- The app shows near-miss recipes: those missing exactly one requirement.
+- The app hides no recipe. It ranks every recipe by a makeability metric
+  (not yet defined) and shows the list in that order. A fully makeable
+  recipe ranks first; a recipe missing one requirement ranks next; and so
+  on (decided 2026-09-20).
+- An unresolved line counts as one unmet house-made requirement. The app
+  shows the line's raw text, so the user can see what the recipe needs and
+  decide for themselves.
 
 ## Open questions
 
-- Substitutes for unplaceable strings outside the syrup and bitters families
-  (house mixes, one-off liqueurs).
+- The makeability metric: how to weigh a missing staple against a missing
+  house-made ingredient, and how substitutes count.
 - Recipes edited on punchdrink.com after they were cached. The Algolia
   index exposes `post_modified`; the crawler could compare it with the
   cached `updatedDate` and refetch. Not done: rebuilds never re-crawl, and

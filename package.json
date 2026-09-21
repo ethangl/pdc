@@ -13,6 +13,7 @@
     "coverage": "tsx scripts/coverage.ts",
     "classify": "tsx scripts/classify.ts",
     "mapping": "tsx scripts/build-mapping.ts",
+    "app:data": "tsx scripts/app-data.ts",
     "crawl": "tsx scripts/crawl-punch.ts"
   },
   "dependencies": {
